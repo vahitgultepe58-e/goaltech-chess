@@ -334,23 +334,13 @@ def token_uret(kullanici_adi):
 # =====================================================================
 # 5. PYGAME TAM EKRAN AYARLARI
 # =====================================================================
-pygame.init()
 
-ekran = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
 GENISLIK, YUKSEKLIK = ekran.get_size()
-pygame.display.set_caption("GOALTECH CHESS")
 
 KARE_BOYUTU = min(GENISLIK, YUKSEKLIK - 200) // 8
 BASLANGIC_X = (GENISLIK - (8 * KARE_BOYUTU)) // 2
 BASLANGIC_Y = (YUKSEKLIK - (8 * KARE_BOYUTU)) // 2 + 30
 
-font_dev_tas = pygame.font.SysFont("dejavusans", 64)
-font_sembol = pygame.font.SysFont("dejavusans", int(KARE_BOYUTU * 0.75))
-font_baslik = pygame.font.SysFont("dejavusans", 54, bold=True)
-font_alt_baslik = pygame.font.SysFont("dejavusans", 20)
-font_normal = pygame.font.SysFont("dejavusans", 22, bold=True)
-font_yazi = pygame.font.SysFont("dejavusans", 20)
-font_kucuk = pygame.font.SysFont("dejavusans", 16, bold=True)
 
 
 # =====================================================================
@@ -391,7 +381,6 @@ def arayuzu_baslat():
     global siyah_sah_oynadi, siyah_kale_sol_oynadi, siyah_kale_sag_oynadi
     global gecerken_alinabilir_kare, elli_hamle_sayaci
 
-    saat = pygame.time.Clock()
     oyun_durumu = "LOGIN"
     
     girilen_ad = ""
@@ -410,13 +399,8 @@ def arayuzu_baslat():
     kart_x = (GENISLIK - kart_gen) // 2
     kart_y = (YUKSEKLIK - kart_yuk) // 2 + 60
 
-    ad_kutu_rect = pygame.Rect(kart_x + 40, kart_y + 90, kart_gen - 80, 50)
-    sifre_kutu_rect = pygame.Rect(kart_x + 40, kart_y + 200, kart_gen - 80, 50)
-    giris_btn_rect = pygame.Rect(kart_x + 40, kart_y + 295, kart_gen - 80, 55)
-    cikis_btn_rect = pygame.Rect(GENISLIK - 150, 20, 130, 40)
     
     # GERİ AL (UNDO) BUTONU KOORDİNATLARI (Üst panelin sağ tarafı)
-    geri_al_btn_rect = pygame.Rect(BASLANGIC_X + (8 * KARE_BOYUTU) - 130, 25, 120, 40)
 
     vitrin_taslari = ['♔', '♕', '♖', '♗', '♘', '♙']
 
@@ -459,14 +443,10 @@ def arayuzu_baslat():
     calisiyor = True
     while calisiyor:
         zaman = time.time()
-        fare_pos = pygame.mouse.get_pos()
         ekran.fill(ARKAPLAN_RENK)
 
-        for olay in pygame.event.get():
-            if olay.type == pygame.QUIT:
                 calisiyor = False
 
-            if olay.type == pygame.KEYDOWN and olay.key == pygame.K_ESCAPE:
                 if oyun_durumu == "OYUN":
                     oyun_durumu = "LOGIN"
                     girilen_sifre = ""
@@ -475,7 +455,6 @@ def arayuzu_baslat():
                 else:
                     calisiyor = False  
 
-            if olay.type == pygame.MOUSEBUTTONDOWN:
                 if cikis_btn_rect.collidepoint(olay.pos):
                     if oyun_durumu == "OYUN":
                         oyun_durumu = "LOGIN"
@@ -510,7 +489,6 @@ def arayuzu_baslat():
                         terfi_bekleyen = None
 
             if oyun_durumu == "LOGIN":
-                if olay.type == pygame.MOUSEBUTTONDOWN:
                     if ad_kutu_rect.collidepoint(olay.pos):
                         aktif_kutu = "ad"
                     elif sifre_kutu_rect.collidepoint(olay.pos):
@@ -528,10 +506,7 @@ def arayuzu_baslat():
                         else:
                             hata_mesaji = "Hatalı kullanıcı adı veya şifre!"
 
-                if olay.type == pygame.KEYDOWN:
-                    if olay.key == pygame.K_TAB:
                         aktif_kutu = "sifre" if aktif_kutu == "ad" else "ad"
-                    elif olay.key == pygame.K_RETURN:
                         if girilen_ad == KAYITLI_KULLANICI and girilen_sifre == KAYITLI_SIFRE:
                             aktif_token = token_uret(girilen_ad)
                             oyun_durumu = "OYUN"
@@ -543,12 +518,10 @@ def arayuzu_baslat():
                             son_hamle = "Oyun başladı. Hamle sırası Beyazda."
                         else:
                             hata_mesaji = "Hatalı kullanıcı adı veya şifre!"
-                    elif olay.key == pygame.K_BACKSPACE:
                         if aktif_kutu == "ad":
                             girilen_ad = girilen_ad[:-1]
                         else:
                             girilen_sifre = girilen_sifre[:-1]
-                    elif olay.key != pygame.K_ESCAPE:
                         if aktif_kutu == "ad" and len(girilen_ad) < 20:
                             girilen_ad += olay.unicode
                         elif aktif_kutu == "sifre" and len(girilen_sifre) < 20:
@@ -556,7 +529,6 @@ def arayuzu_baslat():
 
             elif oyun_durumu == "OYUN" and not kazanan:
                 if terfi_bekleyen:
-                    if olay.type == pygame.MOUSEBUTTONDOWN:
                         mx, my = olay.pos
                         p_sat, p_sut, p_beyaz = terfi_bekleyen
                         secenekler = ['Q', 'R', 'B', 'N'] if p_beyaz else ['q', 'r', 'b', 'n']
@@ -566,7 +538,6 @@ def arayuzu_baslat():
                         menu_y = (YUKSEKLIK - menu_h) // 2
 
                         for i, secenek_tas in enumerate(secenekler):
-                            kutu_rect = pygame.Rect(menu_x + i * KARE_BOYUTU, menu_y + 35, KARE_BOYUTU, KARE_BOYUTU)
                             if kutu_rect.collidepoint(mx, my):
                                 tahta[p_sat][p_sut] = secenek_tas
                                 son_hamle += f" (Terfi: {TAS_ISIMLERI[secenek_tas.upper()]})"
@@ -575,7 +546,6 @@ def arayuzu_baslat():
                                 break
                     continue
 
-                if olay.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = olay.pos
 
                     # TAHTA ÜZERİNE TIKLAMA KONTROLÜ (Geri al butonuna basılmadıysa)
@@ -705,7 +675,6 @@ def arayuzu_baslat():
             for r in range(0, YUKSEKLIK, bg_kare):
                 for c in range(0, GENISLIK, bg_kare):
                     if ((r // bg_kare) + (c // bg_kare)) % 2 == 0:
-                        pygame.draw.rect(ekran, (23, 28, 36), (c, r, bg_kare, bg_kare))
 
             toplam_vitrin_gen = len(vitrin_taslari) * 85
             vitrin_bas_x = (GENISLIK - toplam_vitrin_gen) // 2 + 20
@@ -723,29 +692,21 @@ def arayuzu_baslat():
             alt_baslik = font_alt_baslik.render("Güvenli Oyuncu Giriş Portalı", True, (140, 150, 165))
             ekran.blit(alt_baslik, (GENISLIK // 2 - alt_baslik.get_width() // 2, kart_y - 42))
 
-            pygame.draw.rect(ekran, (10, 12, 16), (kart_x + 8, kart_y + 8, kart_gen, kart_yuk), border_radius=18)
-            pygame.draw.rect(ekran, PANEL_RENK, (kart_x, kart_y, kart_gen, kart_yuk), border_radius=18)
-            pygame.draw.rect(ekran, (55, 65, 85), (kart_x, kart_y, kart_gen, kart_yuk), width=2, border_radius=18)
 
             imlec = "|" if int(zaman * 2) % 2 == 0 else ""
 
             ekran.blit(font_normal.render("KULLANICI ADI", True, GRI), (ad_kutu_rect.x, ad_kutu_rect.y - 30))
-            pygame.draw.rect(ekran, KUTU_RENK, ad_kutu_rect, border_radius=10)
             cerceve_ad = (0, 180, 200) if aktif_kutu == "ad" else (60, 70, 85)
-            pygame.draw.rect(ekran, cerceve_ad, ad_kutu_rect, width=2, border_radius=10)
             ad_metin = girilen_ad + (imlec if aktif_kutu == "ad" else "")
             ekran.blit(font_yazi.render(ad_metin, True, BEYAZ), (ad_kutu_rect.x + 15, ad_kutu_rect.y + 12))
 
             ekran.blit(font_normal.render("ŞİFRE", True, GRI), (sifre_kutu_rect.x, sifre_kutu_rect.y - 30))
-            pygame.draw.rect(ekran, KUTU_RENK, sifre_kutu_rect, border_radius=10)
             cerceve_sifre = (0, 180, 200) if aktif_kutu == "sifre" else (60, 70, 85)
-            pygame.draw.rect(ekran, cerceve_sifre, sifre_kutu_rect, width=2, border_radius=10)
             sifre_metin = ("●" * len(girilen_sifre)) + (imlec if aktif_kutu == "sifre" else "")
             ekran.blit(font_yazi.render(sifre_metin, True, (0, 180, 200)), (sifre_kutu_rect.x + 15, sifre_kutu_rect.y + 12))
 
             btn_hover = giris_btn_rect.collidepoint(fare_pos)
             btn_renk = (235, 115, 20) if btn_hover else (150, 60, 0)
-            pygame.draw.rect(ekran, btn_renk, giris_btn_rect, border_radius=12)
             btn_yazi = font_normal.render("OYUNA GİRİŞ YAP  ➔", True, BEYAZ)
             ekran.blit(btn_yazi, (giris_btn_rect.centerx - btn_yazi.get_width() // 2, giris_btn_rect.centery - btn_yazi.get_height() // 2))
 
@@ -754,9 +715,6 @@ def arayuzu_baslat():
                 ekran.blit(uyari, (GENISLIK // 2 - uyari.get_width() // 2, kart_y + 370))
 
         elif oyun_durumu == "OYUN":
-            ust_panel = pygame.Rect(BASLANGIC_X, 20, 8 * KARE_BOYUTU, 85)
-            pygame.draw.rect(ekran, PANEL_RENK, ust_panel, border_radius=12)
-            pygame.draw.rect(ekran, (55, 65, 85), ust_panel, width=2, border_radius=12)
 
             sira_metni = "SIRA: BEYAZ" if beyaz_sirasi else "SIRA: SİYAH"
             sira_renk = BEYAZ_TAS_RENK if beyaz_sirasi else (160, 160, 160)
@@ -768,7 +726,6 @@ def arayuzu_baslat():
             ekran.blit(skor_b, (ust_panel.x + 20, ust_panel.y + 50))
             ekran.blit(skor_s, (ust_panel.x + 340, ust_panel.y + 50))
 
-            pygame.draw.rect(ekran, PANEL_RENK, (BASLANGIC_X - 35, BASLANGIC_Y - 10, 8 * KARE_BOYUTU + 45, 8 * KARE_BOYUTU + 40), border_radius=10)
 
             aktif_sah_r, aktif_sah_c = sah_konumu_bul(beyaz_sirasi)
             aktif_sah_tehditte = tehdit_altinda_mi(aktif_sah_r, aktif_sah_c, not beyaz_sirasi)
@@ -786,7 +743,6 @@ def arayuzu_baslat():
 
                     x = BASLANGIC_X + sutun * KARE_BOYUTU
                     y = BASLANGIC_Y + satir * KARE_BOYUTU
-                    pygame.draw.rect(ekran, kare_renk, (x, y, KARE_BOYUTU, KARE_BOYUTU))
 
                     tas = tahta[satir][sutun]
                     if tas != ' ':
@@ -802,12 +758,10 @@ def arayuzu_baslat():
             for (h_sat, h_sut) in olasi_hamleler:
                 merkez_x = BASLANGIC_X + h_sut * KARE_BOYUTU + KARE_BOYUTU // 2
                 merkez_y = BASLANGIC_Y + h_sat * KARE_BOYUTU + KARE_BOYUTU // 2
-                pygame.draw.circle(ekran, YESIL_NOKTA, (merkez_x, merkez_y), KARE_BOYUTU // 6)
 
             # --- GERİ AL (UNDO) BUTONU ÇİZİMİ ---
             geri_al_hover = geri_al_btn_rect.collidepoint(fare_pos)
             geri_al_renk = (70, 130, 180) if geri_al_hover else (40, 90, 130)
-            pygame.draw.rect(ekran, geri_al_renk, geri_al_btn_rect, border_radius=8)
             geri_al_yazi = font_kucuk.render("↩ HAMLEYİ GERİ AL", True, BEYAZ)
             ekran.blit(geri_al_yazi, (geri_al_btn_rect.centerx - geri_al_yazi.get_width() // 2, geri_al_btn_rect.centery - geri_al_yazi.get_height() // 2))
 
@@ -820,17 +774,12 @@ def arayuzu_baslat():
                 menu_x = (GENISLIK - menu_w) // 2
                 menu_y = (YUKSEKLIK - menu_h) // 2
 
-                pygame.draw.rect(ekran, PANEL_RENK, (menu_x - 15, menu_y - 10, menu_w + 30, menu_h + 20), border_radius=12)
-                pygame.draw.rect(ekran, SARI_SECIM, (menu_x - 15, menu_y - 10, menu_w + 30, menu_h + 20), width=3, border_radius=12)
                 
                 baslik_terfi = font_kucuk.render("PİYON TERFİSİ: Yeni Taşı Seçin", True, BEYAZ)
                 ekran.blit(baslik_terfi, (GENISLIK // 2 - baslik_terfi.get_width() // 2, menu_y))
 
                 for i, secenek_tas in enumerate(secenekler):
-                    kutu_rect = pygame.Rect(menu_x + i * KARE_BOYUTU, menu_y + 35, KARE_BOYUTU, KARE_BOYUTU)
                     kutu_renk = SARI_SECIM if kutu_rect.collidepoint(fare_pos) else ACIK_KARE
-                    pygame.draw.rect(ekran, kutu_renk, kutu_rect, border_radius=6)
-                    pygame.draw.rect(ekran, KOYU_KARE, kutu_rect, width=2, border_radius=6)
 
                     t_renk = BEYAZ_TAS_RENK if p_beyaz else SIYAH_TAS_RENK
                     s_yazi = font_sembol.render(SEMBOLLER[secenek_tas], True, t_renk)
@@ -841,14 +790,16 @@ def arayuzu_baslat():
             ekran.blit(token_bilgi, (BASLANGIC_X, YUKSEKLIK - 30))
 
         # Sağ Üst Çıkış/Girişe Dön Butonu
-        pygame.draw.rect(ekran, (180, 40, 40) if cikis_btn_rect.collidepoint(fare_pos) else (130, 30, 30), cikis_btn_rect, border_radius=8)
         cikis_yazi = font_kucuk.render("GİRİŞE DÖN" if oyun_durumu == "OYUN" else "ÇIKIŞ (ESC)", True, BEYAZ)
         ekran.blit(cikis_yazi, (cikis_btn_rect.centerx - cikis_yazi.get_width() // 2, cikis_btn_rect.centery - cikis_yazi.get_height() // 2))
 
-        pygame.display.update()
         saat.tick(60)
 
-    pygame.quit()
 
 if __name__ == "__main__":
     arayuzu_baslat()
+import os
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
