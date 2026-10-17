@@ -445,7 +445,6 @@ def arayuzu_baslat():
         zaman = time.time()
         ekran.fill(ARKAPLAN_RENK)
 
-                calisiyor = False
 
                 if oyun_durumu == "OYUN":
                     oyun_durumu = "LOGIN"
@@ -453,7 +452,6 @@ def arayuzu_baslat():
                     hata_mesaji = ""
                     terfi_bekleyen = None
                 else:
-                    calisiyor = False  
 
                 if cikis_btn_rect.collidepoint(olay.pos):
                     if oyun_durumu == "OYUN":
@@ -462,7 +460,6 @@ def arayuzu_baslat():
                         hata_mesaji = ""
                         terfi_bekleyen = None
                     else:
-                        calisiyor = False  
 
                 # --- GERİ AL (UNDO) BUTONUNA BASILDIĞINDA ---
                 elif oyun_durumu == "OYUN" and geri_al_btn_rect.collidepoint(olay.pos):
