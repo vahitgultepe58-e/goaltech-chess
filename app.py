@@ -3,18 +3,18 @@ import json
 import time
 import sqlite3
 import jwt
-from flask import Flask, render_template_string, jsonify, request
+from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
 # =====================================================================
 # 1. VERİLER VE OYUN DURUMU
 # =====================================================================
-SEMBOLLER = {
-    'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
-    'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟',
-    ' ': ' '
-}
+KAYITLI_KULLANICI = "vahit"
+KAYITLI_SIFRE = "yasin12345"
+SECRET_KEY = "goaltech_secret_key"
+
+SEMBOLLER = {'K':'♔','Q':'♕','R':'♖','B':'♗','N':'♘','P':'♙', 'k':'♚','q':'♛','r':'♜','b':'♝','n':'♞','p':'♟',' ':' '}
 TAS_PUANLARI = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0}
 
 beyaz_sirasi = True
@@ -68,7 +68,7 @@ def veritabanini_kur():
             beyaz_puan TEXT,
             siyah_puan TEXT,
             kazanan TEXT,
-            tاريخ DATETIME DEFAULT CURRENT_TIMESTAMP
+            tarih DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
     baglanti.commit()
@@ -76,24 +76,24 @@ def veritabanini_kur():
 
 def mac_kaydet(oyuncu_adi, b_skor, s_skor, kazanan_taraf):
     try:
-        s_oyuncu = xor_kripto(oyuncu_adi, DB_ANAHTAR)
-        s_kazanan = xor_kripto(kazanan_taraf, DB_ANAHTAR)
-        s_beyaz = xor_kripto(b_skor, DB_ANAHTAR)
-        s_siyah = xor_kripto(s_skor, DB_ANAHTAR)
-        
         baglanti = sqlite3.connect("goaltech_chess.db")
         imlec = baglanti.cursor()
         imlec.execute("INSERT INTO Mac_Gecmisi (oyuncu, beyaz_puan, siyah_puan, kazanan) VALUES (?, ?, ?, ?)", 
-                      (s_oyuncu, s_beyaz, s_siyah, s_kazanan))
+                      (xor_kripto(oyuncu_adi, DB_ANAHTAR), xor_kripto(b_skor, DB_ANAHTAR), xor_kripto(s_skor, DB_ANAHTAR), xor_kripto(kazanan_taraf, DB_ANAHTAR)))
         baglanti.commit()
         baglanti.close()
     except Exception as e:
-        print("VERİTABANI HATASI:", e)
+        print("DB HATA:", e)
 
 veritabanini_kur()
 
+def token_uret(kullanici_adi):
+    payload = {"oyuncu": kullanici_adi, "oyun": "Goaltech Chess", "exp": int(time.time()) + 3600}
+    res = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    return res if isinstance(res, str) else res.decode('utf-8')
+
 # =====================================================================
-# 3. KURAL MOTORU (SENİN ORİJİNAL FONKSİYONLARIN)
+# 3. KURAL MOTORU (ORİJİNAL)
 # =====================================================================
 def yol_acik_mi(b_sat, b_sut, h_sat, h_sut):
     adim_sat = 0 if h_sat == b_sat else (1 if h_sat > b_sat else -1)
@@ -113,10 +113,8 @@ def sah_konumu_bul(beyaz_mi):
 
 def kural_kontrol_ham(tas, b_sat, b_sut, h_sat, h_sut):
     tip = tas.upper()
-    df_sat = abs(h_sat - b_sat)
-    df_sut = abs(h_sut - b_sut)
+    df_sat, df_sut = abs(h_sat - b_sat), abs(h_sut - b_sut)
     hedef = tahta[h_sat][h_sut]
-
     if tip == 'P':
         yon = -1 if tas.isupper() else 1
         baslangic = 6 if tas.isupper() else 1
@@ -141,36 +139,19 @@ def tehdit_altinda_mi(satir, sutun, saldirgan_beyaz_mi):
                 if tas.upper() == 'P':
                     yon = -1 if tas.isupper() else 1
                     if satir - r == yon and abs(sutun - c) == 1: return True
-                else:
-                    if kural_kontrol_ham(tas, r, c, satir, sutun): return True
+                elif kural_kontrol_ham(tas, r, c, satir, sutun): return True
     return False
 
 def kural_kontrol(tas, b_sat, b_sut, h_sat, h_sut):
-    tip = tas.upper()
     if kural_kontrol_ham(tas, b_sat, b_sut, h_sat, h_sut): return True
-    # ROK
+    tip, beyaz_mi = tas.upper(), tas.isupper()
     if tip == 'K' and b_sat == h_sat and abs(h_sut - b_sut) == 2:
-        beyaz_mi = tas.isupper()
-        if beyaz_mi and (b_sat, b_sut) == (7, 4):
-            if beyaz_sah_oynadi or tehdit_altinda_mi(7, 4, False): return False
-            if h_sut == 6:
-                if beyaz_kale_sag_oynadi or tahta[7][7] != 'R' or tahta[7][5] != ' ' or tahta[7][6] != ' ': return False
-                if tehdit_altinda_mi(7, 5, False) or tehdit_altinda_mi(7, 6, False): return False
-                return True
-            elif h_sut == 2:
-                if beyaz_kale_sol_oynadi or tahta[7][0] != 'R' or tahta[7][1] != ' ' or tahta[7][2] != ' ' or tahta[7][3] != ' ': return False
-                if tehdit_altinda_mi(7, 3, False) or tehdit_altinda_mi(7, 2, False): return False
-                return True
-        elif not beyaz_mi and (b_sat, b_sut) == (0, 4):
-            if siyah_sah_oynadi or tehdit_altinda_mi(0, 4, True): return False
-            if h_sut == 6:
-                if siyah_kale_sag_oynadi or tahta[0][7] != 'r' or tahta[0][5] != ' ' or tahta[0][6] != ' ': return False
-                if tehdit_altinda_mi(0, 5, True) or tehdit_altinda_mi(0, 6, True): return False
-                return True
-            elif h_sut == 2:
-                if siyah_kale_sol_oynadi or tahta[0][0] != 'r' or tahta[0][1] != ' ' or tahta[0][2] != ' ' or tahta[0][3] != ' ': return False
-                if tehdit_altinda_mi(0, 3, True) or tehdit_altinda_mi(0, 2, True): return False
-                return True
+        if beyaz_mi and (b_sat, b_sut) == (7, 4) and not beyaz_sah_oynadi and not tehdit_altinda_mi(7, 4, False):
+            if h_sut == 6 and not beyaz_kale_sag_oynadi and tahta[7][7] == 'R' and tahta[7][5] == ' ' and tahta[7][6] == ' ' and not tehdit_altinda_mi(7, 5, False) and not tehdit_altinda_mi(7, 6, False): return True
+            if h_sut == 2 and not beyaz_kale_sol_oynadi and tahta[7][0] == 'R' and tahta[7][1] == ' ' and tahta[7][2] == ' ' and tahta[7][3] == ' ' and not tehdit_altinda_mi(7, 3, False) and not tehdit_altinda_mi(7, 2, False): return True
+        elif not beyaz_mi and (b_sat, b_sut) == (0, 4) and not siyah_sah_oynadi and not tehdit_altinda_mi(0, 4, True):
+            if h_sut == 6 and not siyah_kale_sag_oynadi and tahta[0][7] == 'r' and tahta[0][5] == ' ' and tahta[0][6] == ' ' and not tehdit_altinda_mi(0, 5, True) and not tehdit_altinda_mi(0, 6, True): return True
+            if h_sut == 2 and not siyah_kale_sol_oynadi and tahta[0][0] == 'r' and tahta[0][1] == ' ' and tahta[0][2] == ' ' and tahta[0][3] == ' ' and not tehdit_altinda_mi(0, 3, True) and not tehdit_altinda_mi(0, 2, True): return True
     return False
 
 def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
@@ -178,84 +159,51 @@ def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
     hamleler = []
     for h_sat in range(8):
         for h_sut in range(8):
-            hedef_tas = tahta[h_sat][h_sut]
-            if hedef_tas == ' ' or hedef_tas.isupper() != b_sirasi:
+            hedef = tahta[h_sat][h_sut]
+            if hedef == ' ' or hedef.isupper() != b_sirasi:
                 if kural_kontrol(secilen, b_sat, b_sut, h_sat, h_sut):
-                    gecici_hedef = tahta[h_sat][h_sut]
-                    alinan_en_passant_tas = ' '
-                    en_passant_yapiliyor = False
-                    if secilen.upper() == 'P' and abs(h_sut - b_sut) == 1 and gecici_hedef == ' ':
-                        en_passant_yapiliyor = True
+                    alinan_ep = ' '
+                    ep_yapiliyor = False
+                    if secilen.upper() == 'P' and abs(h_sut - b_sut) == 1 and hedef == ' ':
+                        ep_yapiliyor = True
                         yon = -1 if b_sirasi else 1
-                        alinan_en_passant_tas = tahta[h_sat - yon][h_sut]
+                        alinan_ep = tahta[h_sat - yon][h_sut]
                         tahta[h_sat - yon][h_sut] = ' '
                     tahta[h_sat][h_sut] = secilen
                     tahta[b_sat][b_sut] = ' '
-                    
-                    roklu_mu = False
-                    kale_eski, kale_yeni = None, None
+                    roklu = False
                     if secilen.upper() == 'K' and abs(h_sut - b_sut) == 2:
-                        roklu_mu = True
-                        if h_sut == 6: kale_eski, kale_yeni = (h_sat, 7), (h_sat, 5)
-                        elif h_sut == 2: kale_eski, kale_yeni = (h_sat, 0), (h_sat, 3)
-                        tahta[kale_yeni[0]][kale_yeni[1]] = tahta[kale_eski[0]][kale_eski[1]]
-                        tahta[kale_eski[0]][kale_eski[1]] = ' '
-
-                    sah_sat, sah_sut = sah_konumu_bul(b_sirasi)
-                    if not tehdit_altinda_mi(sah_sat, sah_sut, not b_sirasi):
-                        hamleler.append([h_sat, h_sut]) # JSON listesi olarak döner
-                        
-                    if roklu_mu:
-                        tahta[kale_eski[0]][kale_eski[1]] = tahta[kale_yeni[0]][kale_yeni[1]]
-                        tahta[kale_yeni[0]][kale_yeni[1]] = ' '
-                    if en_passant_yapiliyor:
-                        yon = -1 if b_sirasi else 1
-                        tahta[h_sat - yon][h_sut] = alinan_en_passant_tas
+                        roklu = True
+                        k_eski, k_yeni = ((h_sat, 7), (h_sat, 5)) if h_sut == 6 else ((h_sat, 0), (h_sat, 3))
+                        tahta[k_yeni[0]][k_yeni[1]] = tahta[k_eski[0]][k_eski[1]]
+                        tahta[k_eski[0]][k_eski[1]] = ' '
+                    s_sat, s_sut = sah_konumu_bul(b_sirasi)
+                    if not tehdit_altinda_mi(s_sat, s_sut, not b_sirasi):
+                        hamleler.append([h_sat, h_sut])
+                    if roklu:
+                        tahta[k_eski[0]][k_eski[1]] = tahta[k_yeni[0]][k_yeni[1]]
+                        tahta[k_yeni[0]][k_yeni[1]] = ' '
+                    if ep_yapiliyor:
+                        tahta[h_sat - (-1 if b_sirasi else 1)][h_sut] = alinan_ep
                     tahta[b_sat][b_sut] = secilen
-                    tahta[h_sat][h_sut] = gecici_hedef
+                    tahta[h_sat][h_sut] = hedef
     return hamleler
 
 def tum_gecerli_hamlelerin_sayisi(b_sirasi):
-    toplam = 0
-    for r in range(8):
-        for c in range(8):
-            tas = tahta[r][c]
-            if tas != ' ' and tas.isupper() == b_sirasi:
-                toplam += len(gecerli_hamleleri_bul(r, c, b_sirasi))
-    return toplam
+    return sum(len(gecerli_hamleleri_bul(r, c, b_sirasi)) for r in range(8) for c in range(8) if tahta[r][c] != ' ' and tahta[r][c].isupper() == b_sirasi)
 
 def tahta_durum_anahtari(b_sirasi):
-    t_str = "".join("".join(s) for s in tahta)
-    r_str = f"{beyaz_sah_oynadi}{beyaz_kale_sol_oynadi}{beyaz_kale_sag_oynadi}{siyah_sah_oynadi}{siyah_kale_sol_oynadi}{siyah_kale_sag_oynadi}"
-    return f"{t_str}_{b_sirasi}_{r_str}_{gecerken_alinabilir_kare}"
+    return "".join("".join(s) for s in tahta) + f"_{b_sirasi}_{beyaz_sah_oynadi}{beyaz_kale_sol_oynadi}{beyaz_kale_sag_oynadi}{siyah_sah_oynadi}{siyah_kale_sol_oynadi}{siyah_kale_sag_oynadi}_{gecerken_alinabilir_kare}"
 
 def oyunu_sifirla():
     global tahta, beyaz_skor, siyah_skor, beyaz_sirasi, hamle_gecmisi, konum_gecmisi
-    global beyaz_sah_oynadi, beyaz_kale_sol_oynadi, beyaz_kale_sag_oynadi
-    global siyah_sah_oynadi, siyah_kale_sol_oynadi, siyah_kale_sag_oynadi
-    global gecerken_alinabilir_kare, elli_hamle_sayaci, yenilen_beyazlar, yenilen_siyahlar
-
-    tahta = [
-        ['r', 'n', 'b', 'q', 'k', 'b', 'n', 'r'],
-        ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-        [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-        [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-        [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-        [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '],
-        ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'],
-        ['R', 'N', 'B', 'Q', 'K', 'B', 'N', 'R']
-    ]
-    beyaz_skor, siyah_skor = 0, 0
-    yenilen_beyazlar.clear(); yenilen_siyahlar.clear()
-    hamle_gecmisi.clear(); konum_gecmisi.clear()
-    beyaz_sirasi = True
-    beyaz_sah_oynadi = beyaz_kale_sol_oynadi = beyaz_kale_sag_oynadi = False
-    siyah_sah_oynadi = siyah_kale_sol_oynadi = siyah_kale_sag_oynadi = False
-    gecerken_alinabilir_kare = None
-    elli_hamle_sayaci = 0
+    global beyaz_sah_oynadi, beyaz_kale_sol_oynadi, beyaz_kale_sag_oynadi, siyah_sah_oynadi, siyah_kale_sol_oynadi, siyah_kale_sag_oynadi, gecerken_alinabilir_kare, elli_hamle_sayaci, yenilen_beyazlar, yenilen_siyahlar
+    tahta = [['r','n','b','q','k','b','n','r'],['p','p','p','p','p','p','p','p'],[' ',' ',' ',' ',' ',' ',' ',' '],[' ',' ',' ',' ',' ',' ',' ',' '],[' ',' ',' ',' ',' ',' ',' ',' '],[' ',' ',' ',' ',' ',' ',' ',' '],['P','P','P','P','P','P','P','P'],['R','N','B','Q','K','B','N','R']]
+    beyaz_skor = siyah_skor = 0; yenilen_beyazlar.clear(); yenilen_siyahlar.clear(); hamle_gecmisi.clear(); konum_gecmisi.clear()
+    beyaz_sirasi = True; beyaz_sah_oynadi = beyaz_kale_sol_oynadi = beyaz_kale_sag_oynadi = siyah_sah_oynadi = siyah_kale_sol_oynadi = siyah_kale_sag_oynadi = False; gecerken_alinabilir_kare = None; elli_hamle_sayaci = 0
 
 # =====================================================================
-# 4. FLASK WEB ARAYÜZÜ (HTML/JS)
+# 4. FLASK WEB ARAYÜZÜ (GİRİŞ + OYUN)
 # =====================================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
@@ -264,56 +212,173 @@ HTML_PAGE = """<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Goaltech Chess</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #12161c; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 10px; }
-        h1 { margin: 0 0 10px 0; color: #4ade80; }
-        .panels { display: flex; gap: 20px; margin-bottom: 10px; width: 100%; max-width: 520px; justify-content: space-between; }
-        .score-box { background: #1e242d; padding: 10px; border-radius: 8px; flex: 1; border: 1px solid #333; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #12161c; color: #fff; margin: 0; padding: 0; min-height: 100vh; overflow: hidden; }
+        
+        /* GİRİŞ EKRANI TASARIMI */
+        #login-screen { position: absolute; top:0; left:0; width:100%; height:100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; background: radial-gradient(circle at center, #1e242d 0%, #12161c 100%); }
+        .login-box { background: rgba(30, 36, 46, 0.85); backdrop-filter: blur(10px); padding: 40px; border-radius: 18px; border: 2px solid #374155; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.5); z-index: 10; width: 320px; }
+        .login-box h1 { margin: 0 0 5px; color: #fff; font-size: 32px; letter-spacing: 1px; }
+        .login-box p { color: #8c96a5; font-size: 14px; margin-bottom: 25px; }
+        .input-group { margin-bottom: 20px; text-align: left; }
+        .input-group label { display: block; font-size: 12px; font-weight: bold; color: #8c96a5; margin-bottom: 5px; }
+        .input-group input { width: 100%; padding: 12px; border-radius: 8px; border: 2px solid #414b56; background: #141920; color: #fff; font-size: 16px; outline: none; box-sizing: border-box; transition: border 0.3s; }
+        .input-group input:focus { border-color: #00b4c8; }
+        .login-btn { background: #ea7314; color: white; border: none; padding: 15px; width: 100%; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .login-btn:hover { background: #c25b0b; }
+        #login-err { color: #ff4b4b; margin-top: 15px; font-weight: bold; font-size: 14px; }
+        
+        /* YÜZEYDE UÇUŞAN TAŞLAR (Animasyon) */
+        .bg-piece { position: absolute; opacity: 0.05; filter: blur(2px); pointer-events: none; animation: float 15s infinite ease-in-out alternate; }
+        @keyframes float { 0% { transform: translateY(0) rotate(0deg); } 100% { transform: translateY(-100px) rotate(20deg); } }
+
+        /* OYUN EKRANI TASARIMI */
+        #game-screen { display: none; flex-direction: column; align-items: center; justify-content: flex-start; padding: 20px; height: 100vh; overflow-y: auto; box-sizing: border-box; }
+        .panels { display: flex; gap: 20px; margin-bottom: 15px; width: 100%; max-width: 520px; justify-content: space-between; }
+        .score-box { background: #1e242d; padding: 10px 15px; border-radius: 8px; flex: 1; border: 1px solid #333; }
         .score-box h3 { margin: 0 0 5px 0; font-size: 16px; color: #facc15; }
-        .caps { font-size: 20px; color: #888; }
-        .board { display: grid; grid-template-columns: repeat(8, 60px); grid-template-rows: repeat(8, 60px); border: 4px solid #27303f; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        @media (max-width: 520px) { .board { grid-template-columns: repeat(8, 42px); grid-template-rows: repeat(8, 42px); } .square { font-size: 28px !important; } }
-        .square { display: flex; align-items: center; justify-content: center; font-size: 42px; cursor: pointer; user-select: none; position: relative; }
-        .light { background-color: #ebecd0; color: #111; }
-        .dark { background-color: #414b56; color: #111; }
+        .caps { font-size: 22px; color: #888; }
+        
+        .board { display: grid; grid-template-columns: repeat(8, 62px); grid-template-rows: repeat(8, 62px); border: 4px solid #27303f; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); user-select: none; }
+        @media (max-width: 530px) { .board { grid-template-columns: repeat(8, 44px); grid-template-rows: repeat(8, 44px); } .square img { width: 36px!important; height: 36px!important; } }
+        
+        .square { display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; transition: background 0.1s; }
+        .square img { width: 50px; height: 50px; pointer-events: none; z-index: 5; filter: drop-shadow(0px 3px 2px rgba(0,0,0,0.4)); }
+        .light { background-color: #ebecd0; }
+        .dark { background-color: #414b56; }
         .selected { background-color: #facc15 !important; }
         .in-check { background-color: #ef4444 !important; }
-        .valid-dot { width: 18px; height: 18px; background-color: #22c55e; border-radius: 50%; position: absolute; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
-        .controls { margin-top: 15px; display: flex; gap: 10px; }
-        button { padding: 10px 16px; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; background: #2563eb; color: white; transition: 0.2s; }
-        button:hover { background: #1d4ed8; }
-        .btn-undo { background: #059669; }
-        .btn-undo:hover { background: #047857; }
-        #msg { margin-top: 10px; font-weight: bold; color: #f87171; font-size: 18px; }
+        .valid-dot { width: 22px; height: 22px; background-color: rgba(34, 197, 94, 0.85); border-radius: 50%; position: absolute; z-index: 10; box-shadow: 0 0 8px rgba(0,0,0,0.6); pointer-events: none; }
+        
+        .controls { margin-top: 20px; display: flex; gap: 10px; }
+        .btn { padding: 12px 20px; font-weight: bold; font-size: 15px; border: none; border-radius: 6px; cursor: pointer; color: white; transition: 0.2s; }
+        .btn-undo { background: #059669; } .btn-undo:hover { background: #047857; }
+        .btn-reset { background: #2563eb; } .btn-reset:hover { background: #1d4ed8; }
+        .btn-logout { background: #be123c; margin-left: 20px; } .btn-logout:hover { background: #9f1239; }
+        
+        #msg { margin-top: 15px; font-weight: bold; color: #f87171; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+        .token-bar { margin-top: auto; margin-bottom: 10px; background: #1a1f26; padding: 10px 20px; border-radius: 8px; font-size: 12px; color: #6b7280; font-family: monospace; border: 1px dashed #374151; word-break: break-all; max-width: 520px; text-align: center; }
+        .token-bar strong { color: #10b981; }
     </style>
 </head>
 <body>
-    <h1>Goaltech Chess</h1>
-    
-    <div class="panels">
-        <div class="score-box">
-            <h3>Beyaz (<span id="w-score">0</span>)</h3>
-            <div class="caps" id="w-caps"></div>
-        </div>
-        <div class="score-box">
-            <h3>Siyah (<span id="b-score">0</span>)</h3>
-            <div class="caps" id="b-caps"></div>
+
+    <!-- GİRİŞ EKRANI -->
+    <div id="login-screen">
+        <!-- Arkaplan Görselleri -->
+        <img src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg" class="bg-piece" style="top: 10%; left: 10%; width: 150px; animation-delay: 0s;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg" class="bg-piece" style="top: 60%; right: 10%; width: 120px; animation-delay: 2s;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg" class="bg-piece" style="top: 20%; right: 20%; width: 100px; animation-delay: 1s;">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg" class="bg-piece" style="bottom: 10%; left: 20%; width: 130px; animation-delay: 3s;">
+
+        <div class="login-box">
+            <h1>GOALTECH</h1>
+            <p>Güvenli Oyuncu Giriş Portalı</p>
+            <div class="input-group">
+                <label>KULLANICI ADI</label>
+                <input type="text" id="username" value="vahit">
+            </div>
+            <div class="input-group">
+                <label>ŞİFRE</label>
+                <input type="password" id="password">
+            </div>
+            <button class="login-btn" onclick="doLogin()">OYUNA GİRİŞ YAP ➔</button>
+            <div id="login-err"></div>
         </div>
     </div>
 
-    <div class="board" id="board"></div>
-    <div id="msg"></div>
-    
-    <div class="controls">
-        <button class="btn-undo" onclick="undoGame()">↩ Hamleyi Geri Al</button>
-        <button onclick="resetGame()">Yeni Oyun</button>
+    <!-- OYUN EKRANI -->
+    <div id="game-screen">
+        <h1 style="margin:0 0 10px 0; color: #fff;">GOALTECH <span style="color:#4ade80;">CHESS</span></h1>
+        
+        <div class="panels">
+            <div class="score-box">
+                <h3>Beyaz Puan: <span id="w-score">0</span></h3>
+                <div class="caps" id="w-caps"></div>
+            </div>
+            <div class="score-box">
+                <h3>Siyah Puan: <span id="b-score">0</span></h3>
+                <div class="caps" id="b-caps"></div>
+            </div>
+        </div>
+
+        <div class="board" id="board"></div>
+        <div id="msg"></div>
+        
+        <div class="controls">
+            <button class="btn btn-undo" onclick="undoGame()">↩ Geri Al</button>
+            <button class="btn btn-reset" onclick="resetGame()">Yeni Oyun</button>
+            <button class="btn btn-logout" onclick="logout()">Çıkış (ESC)</button>
+        </div>
+
+        <div class="token-bar">
+            <strong>Aktif JWT Token:</strong> <span id="token-disp"></span>
+        </div>
     </div>
 
     <script>
-        const SYMBOLS = {'K':'♔','Q':'♕','R':'♖','B':'♗','N':'♘','P':'♙', 'k':'♚','q':'♛','r':'♜','b':'♝','n':'♞','p':'♟',' ':' '};
+        // GERÇEK SATRANÇ GÖRSELLERİ (WIKIPEDIA STANDARTLARI)
+        const IMAGES = {
+            'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
+            'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
+            'R': 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
+            'B': 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+            'N': 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
+            'P': 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
+            'k': 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
+            'q': 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
+            'r': 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
+            'b': 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+            'n': 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
+            'p': 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg'
+        };
+
+        let token = localStorage.getItem('goaltech_token');
         let boardState = [], selected = null, validMoves = [], whiteTurn = true, isCheck = false;
+        let isProcessing = false; // Taşların kafayı yemesini engelleyen kilit mekanizması
+
+        if (token) showGame();
+
+        async function doLogin() {
+            const u = document.getElementById('username').value;
+            const p = document.getElementById('password').value;
+            const res = await fetch('/api/login', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: u, password: p})
+            });
+            const data = await res.json();
+            if (data.success) {
+                token = data.token;
+                localStorage.setItem('goaltech_token', token);
+                document.getElementById('login-err').innerText = '';
+                showGame();
+            } else {
+                document.getElementById('login-err').innerText = data.error;
+            }
+        }
+
+        function logout() {
+            token = null;
+            localStorage.removeItem('goaltech_token');
+            document.getElementById('game-screen').style.display = 'none';
+            document.getElementById('login-screen').style.display = 'flex';
+            document.getElementById('password').value = '';
+        }
+
+        function showGame() {
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            document.getElementById('token-disp').innerText = token.substring(0, 40) + '...';
+            fetchState();
+        }
+
+        // Klavye ile çıkış (ESC) ve Login (Enter)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && token) logout();
+            if (e.key === 'Enter' && !token) doLogin();
+        });
 
         async function fetchState() {
-            const res = await fetch('/api/state');
+            const res = await fetch('/api/state', { headers: {'Authorization': 'Bearer ' + token} });
             const data = await res.json();
             boardState = data.tahta; whiteTurn = data.beyaz_sirasi; isCheck = data.sah_tehdit;
             document.getElementById('w-score').innerText = data.b_skor;
@@ -330,23 +395,33 @@ HTML_PAGE = """<!DOCTYPE html>
                     const sq = document.createElement('div');
                     sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
                     const piece = boardState[r][c];
-                    sq.innerText = SYMBOLS[piece] || '';
+                    
+                    // GERÇEK RESİM EKLEME
+                    if (piece !== ' ') {
+                        const img = document.createElement('img');
+                        img.src = IMAGES[piece];
+                        sq.appendChild(img);
+                    }
+
                     if (selected && selected[0] === r && selected[1] === c) sq.classList.add('selected');
                     if (isCheck && ((whiteTurn && piece === 'K') || (!whiteTurn && piece === 'k'))) sq.classList.add('in-check');
                     if (validMoves.some(m => m[0] === r && m[1] === c)) {
                         const dot = document.createElement('div'); dot.className = 'valid-dot'; sq.appendChild(dot);
                     }
-                    sq.onclick = () => onSquareClick(r, c);
+                    sq.onmousedown = (e) => { e.preventDefault(); onSquareClick(r, c); }; // onmousedown tepkiyi hızlandırır
                     bEl.appendChild(sq);
                 }
             }
         }
 
         async function onSquareClick(r, c) {
+            if (isProcessing) return; // Asenkron karışmayı (kafayı yemeyi) engelle
             document.getElementById('msg').innerText = '';
             const piece = boardState[r][c];
             
+            // Hamle yapma durumu
             if (selected && validMoves.some(m => m[0] === r && m[1] === c)) {
+                isProcessing = true;
                 let promo = null;
                 const selPiece = boardState[selected[0]][selected[1]];
                 if (selPiece.toUpperCase() === 'P' && (r === 0 || r === 7)) {
@@ -354,7 +429,7 @@ HTML_PAGE = """<!DOCTYPE html>
                     if (!['Q','R','B','N','q','r','b','n'].includes(promo)) promo = 'Q';
                 }
                 const res = await fetch('/api/move', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
                     body: JSON.stringify({ from: selected, to: [r, c], promotion: promo })
                 });
                 const data = await res.json();
@@ -365,46 +440,53 @@ HTML_PAGE = """<!DOCTYPE html>
                 } else {
                     document.getElementById('msg').innerText = data.error;
                 }
+                isProcessing = false;
                 return;
             }
 
+            // Taş seçme durumu
             const isWhitePiece = piece !== ' ' && piece === piece.toUpperCase();
             const isBlackPiece = piece !== ' ' && piece === piece.toLowerCase();
             
             if ((whiteTurn && isWhitePiece) || (!whiteTurn && isBlackPiece)) {
                 selected = [r, c];
+                isProcessing = true;
                 const res = await fetch('/api/valid_moves', {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
+                    method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
                     body: JSON.stringify({ r, c })
                 });
                 const data = await res.json();
                 validMoves = data.moves || [];
                 render();
+                isProcessing = false;
             } else {
                 selected = null; validMoves = []; render();
             }
         }
 
-        async function undoGame() { await fetch('/api/undo', { method: 'POST' }); selected = null; validMoves = []; document.getElementById('msg').innerText = ''; fetchState(); }
-        async function resetGame() { await fetch('/api/reset', { method: 'POST' }); selected = null; validMoves = []; document.getElementById('msg').innerText = ''; fetchState(); }
-        fetchState();
+        async function undoGame() { if(isProcessing) return; isProcessing=true; await fetch('/api/undo', { method: 'POST', headers: {'Authorization': 'Bearer ' + token} }); selected = null; validMoves = []; document.getElementById('msg').innerText = ''; await fetchState(); isProcessing=false; }
+        async function resetGame() { if(isProcessing) return; isProcessing=true; await fetch('/api/reset', { method: 'POST', headers: {'Authorization': 'Bearer ' + token} }); selected = null; validMoves = []; document.getElementById('msg').innerText = ''; await fetchState(); isProcessing=false; }
     </script>
 </body>
 </html>"""
 
 @app.route('/')
 def home():
-    return render_template_string(HTML_PAGE)
+    return HTML_PAGE
+
+@app.route('/api/login', methods=['POST'])
+def api_login():
+    data = request.json or {}
+    u, p = data.get('username'), data.get('password')
+    if u == KAYITLI_KULLANICI and p == KAYITLI_SIFRE:
+        return jsonify({'success': True, 'token': token_uret(u)})
+    return jsonify({'success': False, 'error': 'Hatalı kullanıcı adı veya şifre!'})
 
 @app.route('/api/state')
 def api_state():
     k_sat, k_sut = sah_konumu_bul(beyaz_sirasi)
     sah_tehdidi = tehdit_altinda_mi(k_sat, k_sut, not beyaz_sirasi) if k_sat != -1 else False
-    return jsonify({
-        'tahta': tahta, 'beyaz_sirasi': beyaz_sirasi, 'sah_tehdit': sah_tehdidi,
-        'b_skor': beyaz_skor, 's_skor': siyah_skor,
-        'y_beyaz': yenilen_beyazlar, 'y_siyah': yenilen_siyahlar
-    })
+    return jsonify({'tahta': tahta, 'beyaz_sirasi': beyaz_sirasi, 'sah_tehdit': sah_tehdidi, 'b_skor': beyaz_skor, 's_skor': siyah_skor, 'y_beyaz': yenilen_beyazlar, 'y_siyah': yenilen_siyahlar})
 
 @app.route('/api/valid_moves', methods=['POST'])
 def api_valid():
@@ -413,11 +495,7 @@ def api_valid():
 
 @app.route('/api/undo', methods=['POST'])
 def api_undo():
-    global tahta, beyaz_sirasi, beyaz_skor, siyah_skor, yenilen_beyazlar, yenilen_siyahlar
-    global beyaz_sah_oynadi, beyaz_kale_sol_oynadi, beyaz_kale_sag_oynadi
-    global siyah_sah_oynadi, siyah_kale_sol_oynadi, siyah_kale_sag_oynadi
-    global gecerken_alinabilir_kare, elli_hamle_sayaci, hamle_gecmisi
-    
+    global tahta, beyaz_sirasi, beyaz_skor, siyah_skor, yenilen_beyazlar, yenilen_siyahlar, beyaz_sah_oynadi, beyaz_kale_sol_oynadi, beyaz_kale_sag_oynadi, siyah_sah_oynadi, siyah_kale_sol_oynadi, siyah_kale_sag_oynadi, gecerken_alinabilir_kare, elli_hamle_sayaci, hamle_gecmisi
     if hamle_gecmisi:
         eski = hamle_gecmisi.pop()
         tahta = eski['tahta']; beyaz_sirasi = eski['sira']
@@ -426,73 +504,55 @@ def api_undo():
         beyaz_sah_oynadi = eski['b_sah']; siyah_sah_oynadi = eski['s_sah']
         beyaz_kale_sol_oynadi = eski['b_k_sol']; beyaz_kale_sag_oynadi = eski['b_k_sag']
         siyah_kale_sol_oynadi = eski['s_k_sol']; siyah_kale_sag_oynadi = eski['s_k_sag']
-        gecerken_alinabilir_kare = eski['gecerken']
-        elli_hamle_sayaci = eski['elli_sayac']
+        gecerken_alinabilir_kare = eski['gecerken']; elli_hamle_sayaci = eski['elli_sayac']
     return jsonify({'success': True})
 
 @app.route('/api/move', methods=['POST'])
 def api_move():
-    global tahta, beyaz_sirasi, beyaz_skor, siyah_skor, yenilen_beyazlar, yenilen_siyahlar
-    global beyaz_sah_oynadi, beyaz_kale_sol_oynadi, beyaz_kale_sag_oynadi
-    global siyah_sah_oynadi, siyah_kale_sol_oynadi, siyah_kale_sag_oynadi
-    global gecerken_alinabilir_kare, elli_hamle_sayaci, konum_gecmisi, hamle_gecmisi
+    global tahta, beyaz_sirasi, beyaz_skor, siyah_skor, yenilen_beyazlar, yenilen_siyahlar, beyaz_sah_oynadi, beyaz_kale_sol_oynadi, beyaz_kale_sag_oynadi, siyah_sah_oynadi, siyah_kale_sol_oynadi, siyah_kale_sag_oynadi, gecerken_alinabilir_kare, elli_hamle_sayaci, konum_gecmisi, hamle_gecmisi
 
     data = request.json or {}
     b_sat, b_sut = data.get('from')
     h_sat, h_sut = data.get('to')
     terfi = data.get('promotion')
-    
     secilen = tahta[b_sat][b_sut]
     hedef = tahta[h_sat][h_sut]
     gecerliler = gecerli_hamleleri_bul(b_sat, b_sut, beyaz_sirasi)
     
-    if [h_sat, h_sut] not in gecerliler:
-        return jsonify({'success': False, 'error': 'Kural dışı hamle!'})
+    if [h_sat, h_sut] not in gecerliler: return jsonify({'success': False, 'error': 'Kural dışı hamle!'})
         
-    # 1. HAMLEYİ HAFIZAYA AL (UNDO İÇİN)
     hamle_gecmisi.append({
-        'tahta': [s[:] for s in tahta], 'sira': beyaz_sirasi,
-        'b_skor': beyaz_skor, 's_skor': siyah_skor,
+        'tahta': [s[:] for s in tahta], 'sira': beyaz_sirasi, 'b_skor': beyaz_skor, 's_skor': siyah_skor,
         'y_beyaz': list(yenilen_beyazlar), 'y_siyah': list(yenilen_siyahlar),
         'b_sah': beyaz_sah_oynadi, 'b_k_sol': beyaz_kale_sol_oynadi, 'b_k_sag': beyaz_kale_sag_oynadi,
         's_sah': siyah_sah_oynadi, 's_k_sol': siyah_kale_sol_oynadi, 's_k_sag': siyah_kale_sag_oynadi,
         'gecerken': gecerken_alinabilir_kare, 'elli_sayac': elli_hamle_sayaci
     })
 
-    tas_yendi_mi = False
-    yeni_gecerken = None
-
+    tas_yendi_mi, yeni_gecerken = False, None
     if secilen.upper() == 'P':
         yon = -1 if beyaz_sirasi else 1
-        if abs(h_sat - b_sat) == 2:
-            yeni_gecerken = (b_sat + yon, b_sut)
+        if abs(h_sat - b_sat) == 2: yeni_gecerken = (b_sat + yon, b_sut)
         if abs(h_sut - b_sut) == 1 and hedef == ' ' and gecerken_alinabilir_kare == (h_sat, h_sut):
-            alinan_tas = tahta[h_sat - yon][h_sut]
-            tahta[h_sat - yon][h_sut] = ' '
-            tas_yendi_mi = True
-            if beyaz_sirasi: beyaz_skor += TAS_PUANLARI['P']; yenilen_siyahlar.append(SEMBOLLER[alinan_tas])
-            else: siyah_skor += TAS_PUANLARI['P']; yenilen_beyazlar.append(SEMBOLLER[alinan_tas])
+            alinan = tahta[h_sat - yon][h_sut]; tahta[h_sat - yon][h_sut] = ' '; tas_yendi_mi = True
+            if beyaz_sirasi: beyaz_skor += TAS_PUANLARI['P']; yenilen_siyahlar.append(SEMBOLLER[alinan])
+            else: siyah_skor += TAS_PUANLARI['P']; yenilen_beyazlar.append(SEMBOLLER[alinan])
 
     gecerken_alinabilir_kare = yeni_gecerken
-
     if hedef != ' ':
-        tas_yendi_mi = True
-        puan = TAS_PUANLARI.get(hedef.upper(), 0)
+        tas_yendi_mi = True; puan = TAS_PUANLARI.get(hedef.upper(), 0)
         if beyaz_sirasi: beyaz_skor += puan; yenilen_siyahlar.append(SEMBOLLER[hedef])
         else: siyah_skor += puan; yenilen_beyazlar.append(SEMBOLLER[hedef])
 
     elli_hamle_sayaci = 0 if (secilen.upper() == 'P' or tas_yendi_mi) else elli_hamle_sayaci + 1
 
-    # ROK TAŞIMA İŞLEMİ
     if secilen.upper() == 'K' and abs(h_sut - b_sut) == 2:
         if h_sut == 6: tahta[h_sat][5] = tahta[h_sat][7]; tahta[h_sat][7] = ' '
         elif h_sut == 2: tahta[h_sat][3] = tahta[h_sat][0]; tahta[h_sat][0] = ' '
 
-    # TAŞI HEDEFE KOY
     tahta[h_sat][h_sut] = terfi.upper() if (secilen.upper() == 'P' and terfi and beyaz_sirasi) else terfi.lower() if (secilen.upper() == 'P' and terfi and not beyaz_sirasi) else secilen
     tahta[b_sat][b_sut] = ' '
 
-    # BAYRAKLARI GÜNCELLE
     if secilen == 'K': beyaz_sah_oynadi = True
     elif secilen == 'k': siyah_sah_oynadi = True
     elif secilen == 'R':
