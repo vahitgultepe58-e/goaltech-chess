@@ -1,6 +1,11 @@
 from flask import Flask, render_template, request, jsonify
 app = Flask(__name__)
 
+@app.route('/')
+def home():
+    return '<h1>Goaltech Chess Calisiyor!</h1>'
+
+
 import jwt
 import time
 import math
