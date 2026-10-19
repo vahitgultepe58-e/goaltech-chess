@@ -51,12 +51,7 @@ DB_ANAHTAR = "GOALTECH_GIZLI"
 
 def xor_kripto(metin, anahtar):
     metin_str = str(metin)
-    sonuc = ""
-    for i in range(len(metin_str)):
-        harf = metin_str[i]
-        anahtar_harfi = anahtar[i % len(anahtar)]
-        sonuc += chr(ord(harf) ^ ord(anahtar_harfi))
-    return sonuc
+    return "".join(chr(ord(c) ^ ord(anahtar[i % len(anahtar)])) for i, c in enumerate(metin_str))
 
 def veritabanini_kur():
     baglanti = sqlite3.connect("goaltech_chess.db")
@@ -93,7 +88,7 @@ def token_uret(kullanici_adi):
     return res if isinstance(res, str) else res.decode('utf-8')
 
 # =====================================================================
-# 3. KURAL MOTORU (ORİJİNAL)
+# 3. KUSURSUZ SATRANÇ KURAL MOTORU (ROK & BERABERLİK DÜZELTİLMİŞ)
 # =====================================================================
 def yol_acik_mi(b_sat, b_sut, h_sat, h_sut):
     adim_sat = 0 if h_sat == b_sat else (1 if h_sat > b_sat else -1)
@@ -111,47 +106,93 @@ def sah_konumu_bul(beyaz_mi):
             if tahta[r][c] == aranan_sah: return r, c
     return -1, -1
 
-def kural_kontrol_ham(tas, b_sat, b_sut, h_sat, h_sut):
+def tehdit_altinda_mi(satir, sutun, saldirgan_beyaz_mi):
+    for r in range(8):
+        for c in range(8):
+            tas = tahta[r][c]
+            if tas != ' ' and (tas.isupper() == saldirgan_beyaz_mi):
+                tip = tas.upper()
+                df_sat, df_sut = abs(satir - r), abs(sutun - c)
+                if tip == 'P':
+                    yon = -1 if saldirgan_beyaz_mi else 1
+                    if (satir - r == yon) and (df_sut == 1):
+                        return True
+                elif tip == 'N':
+                    if (df_sat == 2 and df_sut == 1) or (df_sat == 1 and df_sut == 2):
+                        return True
+                elif tip == 'B':
+                    if (df_sat == df_sut) and yol_acik_mi(r, c, satir, sutun):
+                        return True
+                elif tip == 'R':
+                    if (r == satir or c == sutun) and yol_acik_mi(r, c, satir, sutun):
+                        return True
+                elif tip == 'Q':
+                    if (r == satir or c == sutun or df_sat == df_sut) and yol_acik_mi(r, c, satir, sutun):
+                        return True
+                elif tip == 'K':
+                    if df_sat <= 1 and df_sut <= 1:
+                        return True
+    return False
+
+def kural_kontrol(tas, b_sat, b_sut, h_sat, h_sut):
     tip = tas.upper()
+    beyaz_mi = tas.isupper()
     df_sat, df_sut = abs(h_sat - b_sat), abs(h_sut - b_sut)
     hedef = tahta[h_sat][h_sut]
+
     if tip == 'P':
-        yon = -1 if tas.isupper() else 1
-        baslangic = 6 if tas.isupper() else 1
+        yon = -1 if beyaz_mi else 1
+        baslangic = 6 if beyaz_mi else 1
         if b_sut == h_sut and hedef == ' ':
             if h_sat - b_sat == yon: return True
             if b_sat == baslangic and h_sat - b_sat == 2 * yon and tahta[b_sat + yon][b_sut] == ' ': return True
         if df_sut == 1 and h_sat - b_sat == yon and hedef != ' ': return True
         if df_sut == 1 and h_sat - b_sat == yon and hedef == ' ' and gecerken_alinabilir_kare == (h_sat, h_sut): return True
         return False
-    elif tip == 'R': return (b_sat == h_sat or b_sut == h_sut) and yol_acik_mi(b_sat, b_sut, h_sat, h_sut)
-    elif tip == 'B': return (df_sat == df_sut) and yol_acik_mi(b_sat, b_sut, h_sat, h_sut)
-    elif tip == 'Q': return (b_sat == h_sat or b_sut == h_sut or df_sat == df_sut) and yol_acik_mi(b_sat, b_sut, h_sat, h_sut)
-    elif tip == 'N': return (df_sat == 2 and df_sut == 1) or (df_sat == 1 and df_sut == 2)
-    elif tip == 'K': return df_sat <= 1 and df_sut <= 1
-    return False
 
-def tehdit_altinda_mi(satir, sutun, saldirgan_beyaz_mi):
-    for r in range(8):
-        for c in range(8):
-            tas = tahta[r][c]
-            if tas != ' ' and tas.isupper() == saldirgan_beyaz_mi:
-                if tas.upper() == 'P':
-                    yon = -1 if tas.isupper() else 1
-                    if satir - r == yon and abs(sutun - c) == 1: return True
-                elif kural_kontrol_ham(tas, r, c, satir, sutun): return True
-    return False
+    elif tip == 'R':
+        return (b_sat == h_sat or b_sut == h_sut) and yol_acik_mi(b_sat, b_sut, h_sat, h_sut)
+    elif tip == 'B':
+        return (df_sat == df_sut) and yol_acik_mi(b_sat, b_sut, h_sat, h_sut)
+    elif tip == 'Q':
+        return (b_sat == h_sat or b_sut == h_sut or df_sat == df_sut) and yol_acik_mi(b_sat, b_sut, h_sat, h_sut)
+    elif tip == 'N':
+        return (df_sat == 2 and df_sut == 1) or (df_sat == 1 and df_sut == 2)
+    elif tip == 'K':
+        if df_sat <= 1 and df_sut <= 1:
+            return True
+        # ROK KONTROLLERİ (KUSURSUZ DOĞRULAMA)
+        if df_sat == 0 and df_sut == 2:
+            if beyaz_mi and (b_sat, b_sut) == (7, 4):
+                if beyaz_sah_oynadi or tehdit_altinda_mi(7, 4, False): return False
+                # Kısa Rok (g1)
+                if h_sut == 6:
+                    if beyaz_kale_sag_oynadi or tahta[7][7] != 'R': return False
+                    if tahta[7][5] != ' ' or tahta[7][6] != ' ': return False
+                    if tehdit_altinda_mi(7, 5, False) or tehdit_altinda_mi(7, 6, False): return False
+                    return True
+                # Uzun Rok (c1)
+                elif h_sut == 2:
+                    if beyaz_kale_sol_oynadi or tahta[7][0] != 'R': return False
+                    if tahta[7][1] != ' ' or tahta[7][2] != ' ' or tahta[7][3] != ' ': return False
+                    if tehdit_altinda_mi(7, 3, False) or tehdit_altinda_mi(7, 2, False): return False
+                    return True
+            elif not beyaz_mi and (b_sat, b_sut) == (0, 4):
+                if siyah_sah_oynadi or tehdit_altinda_mi(0, 4, True): return False
+                # Kısa Rok (g8)
+                if h_sut == 6:
+                    if siyah_kale_sag_oynadi or tahta[0][7] != 'r': return False
+                    if tahta[0][5] != ' ' or tahta[0][6] != ' ': return False
+                    if tehdit_altinda_mi(0, 5, True) or tehdit_altinda_mi(0, 6, True): return False
+                    return True
+                # Uzun Rok (c8)
+                elif h_sut == 2:
+                    if siyah_kale_sol_oynadi or tahta[0][0] != 'r': return False
+                    if tahta[0][1] != ' ' or tahta[0][2] != ' ' or tahta[0][3] != ' ': return False
+                    if tehdit_altinda_mi(0, 3, True) or tehdit_altinda_mi(0, 2, True): return False
+                    return True
+        return False
 
-def kural_kontrol(tas, b_sat, b_sut, h_sat, h_sut):
-    if kural_kontrol_ham(tas, b_sat, b_sut, h_sat, h_sut): return True
-    tip, beyaz_mi = tas.upper(), tas.isupper()
-    if tip == 'K' and b_sat == h_sat and abs(h_sut - b_sut) == 2:
-        if beyaz_mi and (b_sat, b_sut) == (7, 4) and not beyaz_sah_oynadi and not tehdit_altinda_mi(7, 4, False):
-            if h_sut == 6 and not beyaz_kale_sag_oynadi and tahta[7][7] == 'R' and tahta[7][5] == ' ' and tahta[7][6] == ' ' and not tehdit_altinda_mi(7, 5, False) and not tehdit_altinda_mi(7, 6, False): return True
-            if h_sut == 2 and not beyaz_kale_sol_oynadi and tahta[7][0] == 'R' and tahta[7][1] == ' ' and tahta[7][2] == ' ' and tahta[7][3] == ' ' and not tehdit_altinda_mi(7, 3, False) and not tehdit_altinda_mi(7, 2, False): return True
-        elif not beyaz_mi and (b_sat, b_sut) == (0, 4) and not siyah_sah_oynadi and not tehdit_altinda_mi(0, 4, True):
-            if h_sut == 6 and not siyah_kale_sag_oynadi and tahta[0][7] == 'r' and tahta[0][5] == ' ' and tahta[0][6] == ' ' and not tehdit_altinda_mi(0, 5, True) and not tehdit_altinda_mi(0, 6, True): return True
-            if h_sut == 2 and not siyah_kale_sol_oynadi and tahta[0][0] == 'r' and tahta[0][1] == ' ' and tahta[0][2] == ' ' and tahta[0][3] == ' ' and not tehdit_altinda_mi(0, 3, True) and not tehdit_altinda_mi(0, 2, True): return True
     return False
 
 def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
@@ -160,8 +201,9 @@ def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
     for h_sat in range(8):
         for h_sut in range(8):
             hedef = tahta[h_sat][h_sut]
-            if hedef == ' ' or hedef.isupper() != b_sirasi:
+            if hedef == ' ' or (hedef.isupper() != b_sirasi):
                 if kural_kontrol(secilen, b_sat, b_sut, h_sat, h_sut):
+                    # Hamleyi sanal uygula
                     alinan_ep = ' '
                     ep_yapiliyor = False
                     if secilen.upper() == 'P' and abs(h_sut - b_sut) == 1 and hedef == ' ':
@@ -177,9 +219,12 @@ def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
                         k_eski, k_yeni = ((h_sat, 7), (h_sat, 5)) if h_sut == 6 else ((h_sat, 0), (h_sat, 3))
                         tahta[k_yeni[0]][k_yeni[1]] = tahta[k_eski[0]][k_eski[1]]
                         tahta[k_eski[0]][k_eski[1]] = ' '
+                    
                     s_sat, s_sut = sah_konumu_bul(b_sirasi)
                     if not tehdit_altinda_mi(s_sat, s_sut, not b_sirasi):
                         hamleler.append([h_sat, h_sut])
+
+                    # Geri al (restore)
                     if roklu:
                         tahta[k_eski[0]][k_eski[1]] = tahta[k_yeni[0]][k_yeni[1]]
                         tahta[k_yeni[0]][k_yeni[1]] = ' '
@@ -192,6 +237,21 @@ def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
 def tum_gecerli_hamlelerin_sayisi(b_sirasi):
     return sum(len(gecerli_hamleleri_bul(r, c, b_sirasi)) for r in range(8) for c in range(8) if tahta[r][c] != ' ' and tahta[r][c].isupper() == b_sirasi)
 
+def yetersiz_materyal_mi():
+    taslar = []
+    fil_renkleri = []
+    for r in range(8):
+        for c in range(8):
+            t = tahta[r][c]
+            if t != ' ' and t.upper() != 'K':
+                taslar.append(t.upper())
+                if t.upper() == 'B':
+                    fil_renkleri.append((r + c) % 2)
+    if len(taslar) == 0: return True
+    if len(taslar) == 1 and taslar[0] in ['N', 'B']: return True
+    if len(taslar) == 2 and taslar == ['B', 'B'] and fil_renkleri[0] == fil_renkleri[1]: return True
+    return False
+
 def tahta_durum_anahtari(b_sirasi):
     return "".join("".join(s) for s in tahta) + f"_{b_sirasi}_{beyaz_sah_oynadi}{beyaz_kale_sol_oynadi}{beyaz_kale_sag_oynadi}{siyah_sah_oynadi}{siyah_kale_sol_oynadi}{siyah_kale_sag_oynadi}_{gecerken_alinabilir_kare}"
 
@@ -201,9 +261,10 @@ def oyunu_sifirla():
     tahta = [['r','n','b','q','k','b','n','r'],['p','p','p','p','p','p','p','p'],[' ',' ',' ',' ',' ',' ',' ',' '],[' ',' ',' ',' ',' ',' ',' ',' '],[' ',' ',' ',' ',' ',' ',' ',' '],[' ',' ',' ',' ',' ',' ',' ',' '],['P','P','P','P','P','P','P','P'],['R','N','B','Q','K','B','N','R']]
     beyaz_skor = siyah_skor = 0; yenilen_beyazlar.clear(); yenilen_siyahlar.clear(); hamle_gecmisi.clear(); konum_gecmisi.clear()
     beyaz_sirasi = True; beyaz_sah_oynadi = beyaz_kale_sol_oynadi = beyaz_kale_sag_oynadi = siyah_sah_oynadi = siyah_kale_sol_oynadi = siyah_kale_sag_oynadi = False; gecerken_alinabilir_kare = None; elli_hamle_sayaci = 0
+    konum_gecmisi[tahta_durum_anahtari(True)] = 1
 
 # =====================================================================
-# 4. FLASK WEB ARAYÜZÜ (GİRİŞ + OYUN)
+# 4. FLASK WEB ARAYÜZÜ
 # =====================================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
@@ -214,7 +275,6 @@ HTML_PAGE = """<!DOCTYPE html>
     <style>
         body { font-family: 'Segoe UI', Tahoma, sans-serif; background: #12161c; color: #fff; margin: 0; padding: 0; min-height: 100vh; overflow: hidden; }
         
-        /* GİRİŞ EKRANI TASARIMI */
         #login-screen { position: absolute; top:0; left:0; width:100%; height:100%; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; background: radial-gradient(circle at center, #1e242d 0%, #12161c 100%); }
         .login-box { background: rgba(30, 36, 46, 0.85); backdrop-filter: blur(10px); padding: 40px; border-radius: 18px; border: 2px solid #374155; text-align: center; box-shadow: 0 25px 50px rgba(0,0,0,0.5); z-index: 10; width: 320px; }
         .login-box h1 { margin: 0 0 5px; color: #fff; font-size: 32px; letter-spacing: 1px; }
@@ -227,18 +287,16 @@ HTML_PAGE = """<!DOCTYPE html>
         .login-btn:hover { background: #c25b0b; }
         #login-err { color: #ff4b4b; margin-top: 15px; font-weight: bold; font-size: 14px; }
         
-        /* YÜZEYDE UÇUŞAN TAŞLAR (Animasyon) */
         .bg-piece { position: absolute; opacity: 0.05; filter: blur(2px); pointer-events: none; animation: float 15s infinite ease-in-out alternate; }
         @keyframes float { 0% { transform: translateY(0) rotate(0deg); } 100% { transform: translateY(-100px) rotate(20deg); } }
 
-        /* OYUN EKRANI TASARIMI */
         #game-screen { display: none; flex-direction: column; align-items: center; justify-content: flex-start; padding: 20px; height: 100vh; overflow-y: auto; box-sizing: border-box; }
         .panels { display: flex; gap: 20px; margin-bottom: 15px; width: 100%; max-width: 520px; justify-content: space-between; }
         .score-box { background: #1e242d; padding: 10px 15px; border-radius: 8px; flex: 1; border: 1px solid #333; }
         .score-box h3 { margin: 0 0 5px 0; font-size: 16px; color: #facc15; }
         .caps { font-size: 22px; color: #888; }
         
-        .board { display: grid; grid-template-columns: repeat(8, 62px); grid-template-rows: repeat(8, 62px); border: 4px solid #27303f; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); user-select: none; }
+        .board { display: grid; grid-template-columns: repeat(8, 62px); grid-template-rows: repeat(8, 62px); border: 4px solid #27303f; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); user-select: none; position: relative; }
         @media (max-width: 530px) { .board { grid-template-columns: repeat(8, 44px); grid-template-rows: repeat(8, 44px); } .square img { width: 36px!important; height: 36px!important; } }
         
         .square { display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; transition: background 0.1s; }
@@ -258,13 +316,19 @@ HTML_PAGE = """<!DOCTYPE html>
         #msg { margin-top: 15px; font-weight: bold; color: #f87171; font-size: 20px; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
         .token-bar { margin-top: auto; margin-bottom: 10px; background: #1a1f26; padding: 10px 20px; border-radius: 8px; font-size: 12px; color: #6b7280; font-family: monospace; border: 1px dashed #374151; word-break: break-all; max-width: 520px; text-align: center; }
         .token-bar strong { color: #10b981; }
+
+        /* TERFİ SEÇİM MODALI */
+        #promo-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
+        .promo-content { background: #1e242d; padding: 20px; border-radius: 12px; border: 2px solid #facc15; text-align: center; }
+        .promo-pieces { display: flex; gap: 15px; margin-top: 15px; }
+        .promo-piece { background: #2d3748; padding: 10px; border-radius: 8px; cursor: pointer; transition: 0.2s; }
+        .promo-piece:hover { background: #4a5568; transform: scale(1.1); }
+        .promo-piece img { width: 50px; height: 50px; }
     </style>
 </head>
 <body>
 
-    <!-- GİRİŞ EKRANI -->
     <div id="login-screen">
-        <!-- Arkaplan Görselleri -->
         <img src="https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg" class="bg-piece" style="top: 10%; left: 10%; width: 150px; animation-delay: 0s;">
         <img src="https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg" class="bg-piece" style="top: 60%; right: 10%; width: 120px; animation-delay: 2s;">
         <img src="https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg" class="bg-piece" style="top: 20%; right: 20%; width: 100px; animation-delay: 1s;">
@@ -286,7 +350,6 @@ HTML_PAGE = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- OYUN EKRANI -->
     <div id="game-screen">
         <h1 style="margin:0 0 10px 0; color: #fff;">GOALTECH <span style="color:#4ade80;">CHESS</span></h1>
         
@@ -315,8 +378,15 @@ HTML_PAGE = """<!DOCTYPE html>
         </div>
     </div>
 
+    <!-- Piyon Terfi Seçim Paneli -->
+    <div id="promo-modal">
+        <div class="promo-content">
+            <h3 style="margin:0; color:#facc15;">Terfi Edecek Taşı Seçin</h3>
+            <div class="promo-pieces" id="promo-options"></div>
+        </div>
+    </div>
+
     <script>
-        // GERÇEK SATRANÇ GÖRSELLERİ (WIKIPEDIA STANDARTLARI)
         const IMAGES = {
             'K': 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg',
             'Q': 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
@@ -334,7 +404,8 @@ HTML_PAGE = """<!DOCTYPE html>
 
         let token = localStorage.getItem('goaltech_token');
         let boardState = [], selected = null, validMoves = [], whiteTurn = true, isCheck = false;
-        let isProcessing = false; // Taşların kafayı yemesini engelleyen kilit mekanizması
+        let isProcessing = false;
+        let pendingMove = null;
 
         if (token) showGame();
 
@@ -371,7 +442,6 @@ HTML_PAGE = """<!DOCTYPE html>
             fetchState();
         }
 
-        // Klavye ile çıkış (ESC) ve Login (Enter)
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && token) logout();
             if (e.key === 'Enter' && !token) doLogin();
@@ -396,7 +466,6 @@ HTML_PAGE = """<!DOCTYPE html>
                     sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
                     const piece = boardState[r][c];
                     
-                    // GERÇEK RESİM EKLEME
                     if (piece !== ' ') {
                         const img = document.createElement('img');
                         img.src = IMAGES[piece];
@@ -408,43 +477,67 @@ HTML_PAGE = """<!DOCTYPE html>
                     if (validMoves.some(m => m[0] === r && m[1] === c)) {
                         const dot = document.createElement('div'); dot.className = 'valid-dot'; sq.appendChild(dot);
                     }
-                    sq.onmousedown = (e) => { e.preventDefault(); onSquareClick(r, c); }; // onmousedown tepkiyi hızlandırır
+                    sq.onmousedown = (e) => { e.preventDefault(); onSquareClick(r, c); };
                     bEl.appendChild(sq);
                 }
             }
         }
 
+        function showPromoModal(from, to) {
+            pendingMove = { from, to };
+            const modal = document.getElementById('promo-modal');
+            const opts = document.getElementById('promo-options');
+            opts.innerHTML = '';
+            const pieces = whiteTurn ? ['Q', 'R', 'B', 'N'] : ['q', 'r', 'b', 'n'];
+            pieces.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'promo-piece';
+                item.innerHTML = `<img src="${IMAGES[p]}">`;
+                item.onclick = () => selectPromotion(p);
+                opts.appendChild(item);
+            });
+            modal.style.display = 'flex';
+        }
+
+        async function selectPromotion(pieceChoice) {
+            document.getElementById('promo-modal').style.display = 'none';
+            if (!pendingMove) return;
+            await sendMove(pendingMove.from, pendingMove.to, pieceChoice);
+            pendingMove = null;
+        }
+
+        async function sendMove(from, to, promo = null) {
+            isProcessing = true;
+            const res = await fetch('/api/move', {
+                method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+                body: JSON.stringify({ from: from, to: to, promotion: promo })
+            });
+            const data = await res.json();
+            if (data.success) {
+                selected = null; validMoves = [];
+                await fetchState();
+                if (data.mesaj) document.getElementById('msg').innerText = data.mesaj;
+            } else {
+                document.getElementById('msg').innerText = data.error;
+            }
+            isProcessing = false;
+        }
+
         async function onSquareClick(r, c) {
-            if (isProcessing) return; // Asenkron karışmayı (kafayı yemeyi) engelle
+            if (isProcessing) return;
             document.getElementById('msg').innerText = '';
             const piece = boardState[r][c];
             
-            // Hamle yapma durumu
             if (selected && validMoves.some(m => m[0] === r && m[1] === c)) {
-                isProcessing = true;
-                let promo = null;
                 const selPiece = boardState[selected[0]][selected[1]];
                 if (selPiece.toUpperCase() === 'P' && (r === 0 || r === 7)) {
-                    promo = prompt("Piyon terfisi! Q(Vezir), R(Kale), B(Fil), N(At)", "Q");
-                    if (!['Q','R','B','N','q','r','b','n'].includes(promo)) promo = 'Q';
+                    showPromoModal(selected, [r, c]);
+                    return;
                 }
-                const res = await fetch('/api/move', {
-                    method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
-                    body: JSON.stringify({ from: selected, to: [r, c], promotion: promo })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    selected = null; validMoves = [];
-                    await fetchState();
-                    if (data.mesaj) document.getElementById('msg').innerText = data.mesaj;
-                } else {
-                    document.getElementById('msg').innerText = data.error;
-                }
-                isProcessing = false;
+                await sendMove(selected, [r, c]);
                 return;
             }
 
-            // Taş seçme durumu
             const isWhitePiece = piece !== ' ' && piece === piece.toUpperCase();
             const isBlackPiece = piece !== ' ' && piece === piece.toLowerCase();
             
@@ -546,21 +639,29 @@ def api_move():
 
     elli_hamle_sayaci = 0 if (secilen.upper() == 'P' or tas_yendi_mi) else elli_hamle_sayaci + 1
 
+    # ROK ATILDIĞINDA KALEYİ DOĞRU KAREYE TAŞI
     if secilen.upper() == 'K' and abs(h_sut - b_sut) == 2:
-        if h_sut == 6: tahta[h_sat][5] = tahta[h_sat][7]; tahta[h_sat][7] = ' '
-        elif h_sut == 2: tahta[h_sat][3] = tahta[h_sat][0]; tahta[h_sat][0] = ' '
+        if h_sut == 6: # Kısa Rok
+            tahta[h_sat][5] = tahta[h_sat][7]; tahta[h_sat][7] = ' '
+        elif h_sut == 2: # Uzun Rok
+            tahta[h_sat][3] = tahta[h_sat][0]; tahta[h_sat][0] = ' '
 
-    tahta[h_sat][h_sut] = terfi.upper() if (secilen.upper() == 'P' and terfi and beyaz_sirasi) else terfi.lower() if (secilen.upper() == 'P' and terfi and not beyaz_sirasi) else secilen
+    # TAŞI YERLEŞTİR VE TERFİ KONTROLÜ
+    if secilen.upper() == 'P' and terfi:
+        tahta[h_sat][h_sut] = terfi.upper() if beyaz_sirasi else terfi.lower()
+    else:
+        tahta[h_sat][h_sut] = secilen
     tahta[b_sat][b_sut] = ' '
 
+    # OYNAMA BAYRAKLARI
     if secilen == 'K': beyaz_sah_oynadi = True
     elif secilen == 'k': siyah_sah_oynadi = True
     elif secilen == 'R':
-        if b_sut == 0: beyaz_kale_sol_oynadi = True
-        if b_sut == 7: beyaz_kale_sag_oynadi = True
+        if (b_sat, b_sut) == (7, 0): beyaz_kale_sol_oynadi = True
+        elif (b_sat, b_sut) == (7, 7): beyaz_kale_sag_oynadi = True
     elif secilen == 'r':
-        if b_sut == 0: siyah_kale_sol_oynadi = True
-        if b_sut == 7: siyah_kale_sag_oynadi = True
+        if (b_sat, b_sut) == (0, 0): siyah_kale_sol_oynadi = True
+        elif (b_sat, b_sut) == (0, 7): siyah_kale_sag_oynadi = True
 
     beyaz_sirasi = not beyaz_sirasi
     anahtar = tahta_durum_anahtari(beyaz_sirasi)
@@ -572,9 +673,21 @@ def api_move():
 
     mesaj = ""
     if kalan == 0:
-        if sah_tehdidi: mesaj = f"ŞAH MAT! {'Siyah' if not beyaz_sirasi else 'Beyaz'} Kazandı!"; mac_kaydet("vahit", beyaz_skor, siyah_skor, 'Siyah' if not beyaz_sirasi else 'Beyaz')
-        else: mesaj = "PAT! Oyun Berabere."; mac_kaydet("vahit", beyaz_skor, siyah_skor, "BERABERE")
-    elif elli_hamle_sayaci >= 100: mesaj = "50 Hamle Kuralı - Berabere"
+        if sah_tehdidi:
+            mesaj = f"ŞAH MAT! {'Siyah' if not beyaz_sirasi else 'Beyaz'} Kazandı!"
+            mac_kaydet("vahit", beyaz_skor, siyah_skor, 'Siyah' if not beyaz_sirasi else 'Beyaz')
+        else:
+            mesaj = "PAT! Oyun Berabere."
+            mac_kaydet("vahit", beyaz_skor, siyah_skor, "BERABERE")
+    elif elli_hamle_sayaci >= 100:
+        mesaj = "50 Hamle Kuralı Sebebiyle Berabere!"
+        mac_kaydet("vahit", beyaz_skor, siyah_skor, "BERABERE")
+    elif konum_gecmisi.get(anahtar, 0) >= 3:
+        mesaj = "3 Kez Konum Tekrarı Sebebiyle Berabere!"
+        mac_kaydet("vahit", beyaz_skor, siyah_skor, "BERABERE")
+    elif yetersiz_materyal_mi():
+        mesaj = "Yetersiz Materyal Sebebiyle Berabere!"
+        mac_kaydet("vahit", beyaz_skor, siyah_skor, "BERABERE")
     
     return jsonify({'success': True, 'mesaj': mesaj})
 
