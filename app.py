@@ -378,7 +378,6 @@ HTML_PAGE = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- Piyon Terfi Seçim Paneli -->
     <div id="promo-modal">
         <div class="promo-content">
             <h3 style="margin:0; color:#facc15;">Terfi Edecek Taşı Seçin</h3>
