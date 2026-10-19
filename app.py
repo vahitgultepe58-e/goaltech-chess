@@ -88,7 +88,7 @@ def token_uret(kullanici_adi):
     return res if isinstance(res, str) else res.decode('utf-8')
 
 # =====================================================================
-# 3. KUSURSUZ SATRANÇ KURAL MOTORU (ROK & BERABERLİK DÜZELTİLMİŞ)
+# 3. KURAL MOTORU (ROK & BERABERLİK KONTROLLERİ)
 # =====================================================================
 def yol_acik_mi(b_sat, b_sut, h_sat, h_sut):
     adim_sat = 0 if h_sat == b_sat else (1 if h_sat > b_sat else -1)
@@ -161,17 +161,14 @@ def kural_kontrol(tas, b_sat, b_sut, h_sat, h_sut):
     elif tip == 'K':
         if df_sat <= 1 and df_sut <= 1:
             return True
-        # ROK KONTROLLERİ (KUSURSUZ DOĞRULAMA)
         if df_sat == 0 and df_sut == 2:
             if beyaz_mi and (b_sat, b_sut) == (7, 4):
                 if beyaz_sah_oynadi or tehdit_altinda_mi(7, 4, False): return False
-                # Kısa Rok (g1)
                 if h_sut == 6:
                     if beyaz_kale_sag_oynadi or tahta[7][7] != 'R': return False
                     if tahta[7][5] != ' ' or tahta[7][6] != ' ': return False
                     if tehdit_altinda_mi(7, 5, False) or tehdit_altinda_mi(7, 6, False): return False
                     return True
-                # Uzun Rok (c1)
                 elif h_sut == 2:
                     if beyaz_kale_sol_oynadi or tahta[7][0] != 'R': return False
                     if tahta[7][1] != ' ' or tahta[7][2] != ' ' or tahta[7][3] != ' ': return False
@@ -179,13 +176,11 @@ def kural_kontrol(tas, b_sat, b_sut, h_sat, h_sut):
                     return True
             elif not beyaz_mi and (b_sat, b_sut) == (0, 4):
                 if siyah_sah_oynadi or tehdit_altinda_mi(0, 4, True): return False
-                # Kısa Rok (g8)
                 if h_sut == 6:
                     if siyah_kale_sag_oynadi or tahta[0][7] != 'r': return False
                     if tahta[0][5] != ' ' or tahta[0][6] != ' ': return False
                     if tehdit_altinda_mi(0, 5, True) or tehdit_altinda_mi(0, 6, True): return False
                     return True
-                # Uzun Rok (c8)
                 elif h_sut == 2:
                     if siyah_kale_sol_oynadi or tahta[0][0] != 'r': return False
                     if tahta[0][1] != ' ' or tahta[0][2] != ' ' or tahta[0][3] != ' ': return False
@@ -203,7 +198,6 @@ def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
             hedef = tahta[h_sat][h_sut]
             if hedef == ' ' or (hedef.isupper() != b_sirasi):
                 if kural_kontrol(secilen, b_sat, b_sut, h_sat, h_sut):
-                    # Hamleyi sanal uygula
                     alinan_ep = ' '
                     ep_yapiliyor = False
                     if secilen.upper() == 'P' and abs(h_sut - b_sut) == 1 and hedef == ' ':
@@ -224,7 +218,6 @@ def gecerli_hamleleri_bul(b_sat, b_sut, b_sirasi):
                     if not tehdit_altinda_mi(s_sat, s_sut, not b_sirasi):
                         hamleler.append([h_sat, h_sut])
 
-                    # Geri al (restore)
                     if roklu:
                         tahta[k_eski[0]][k_eski[1]] = tahta[k_yeni[0]][k_yeni[1]]
                         tahta[k_yeni[0]][k_yeni[1]] = ' '
@@ -317,7 +310,6 @@ HTML_PAGE = """<!DOCTYPE html>
         .token-bar { margin-top: auto; margin-bottom: 10px; background: #1a1f26; padding: 10px 20px; border-radius: 8px; font-size: 12px; color: #6b7280; font-family: monospace; border: 1px dashed #374151; word-break: break-all; max-width: 520px; text-align: center; }
         .token-bar strong { color: #10b981; }
 
-        /* TERFİ SEÇİM MODALI */
         #promo-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 200; align-items: center; justify-content: center; }
         .promo-content { background: #1e242d; padding: 20px; border-radius: 12px; border: 2px solid #facc15; text-align: center; }
         .promo-pieces { display: flex; gap: 15px; margin-top: 15px; }
@@ -426,12 +418,20 @@ HTML_PAGE = """<!DOCTYPE html>
             }
         }
 
-        function logout() {
+        async function logout() {
+            // ÇIKILDIĞI AN TAHTAYI VE SUNUCUYU BAŞLANGIÇ HALİNE SIFIRLA
+            try {
+                await fetch('/api/reset', { method: 'POST', headers: {'Authorization': 'Bearer ' + token} });
+            } catch(e) {}
+            
             token = null;
             localStorage.removeItem('goaltech_token');
             document.getElementById('game-screen').style.display = 'none';
             document.getElementById('login-screen').style.display = 'flex';
             document.getElementById('password').value = '';
+            document.getElementById('msg').innerText = '';
+            selected = null;
+            validMoves = [];
         }
 
         function showGame() {
@@ -614,7 +614,8 @@ def api_move():
     if [h_sat, h_sut] not in gecerliler: return jsonify({'success': False, 'error': 'Kural dışı hamle!'})
         
     hamle_gecmisi.append({
-        'tahta': [s[:] for s in tahta], 'sira': beyaz_sirasi, 'b_skor': beyaz_skor, 's_skor': siyah_skor,
+        'tahta': [s[:] for s in tahta], 'sira': beyaz_sirasi,
+        'b_skor': beyaz_skor, 's_skor': siyah_skor,
         'y_beyaz': list(yenilen_beyazlar), 'y_siyah': list(yenilen_siyahlar),
         'b_sah': beyaz_sah_oynadi, 'b_k_sol': beyaz_kale_sol_oynadi, 'b_k_sag': beyaz_kale_sag_oynadi,
         's_sah': siyah_sah_oynadi, 's_k_sol': siyah_kale_sol_oynadi, 's_k_sag': siyah_kale_sag_oynadi,
@@ -638,21 +639,18 @@ def api_move():
 
     elli_hamle_sayaci = 0 if (secilen.upper() == 'P' or tas_yendi_mi) else elli_hamle_sayaci + 1
 
-    # ROK ATILDIĞINDA KALEYİ DOĞRU KAREYE TAŞI
     if secilen.upper() == 'K' and abs(h_sut - b_sut) == 2:
-        if h_sut == 6: # Kısa Rok
+        if h_sut == 6:
             tahta[h_sat][5] = tahta[h_sat][7]; tahta[h_sat][7] = ' '
-        elif h_sut == 2: # Uzun Rok
+        elif h_sut == 2:
             tahta[h_sat][3] = tahta[h_sat][0]; tahta[h_sat][0] = ' '
 
-    # TAŞI YERLEŞTİR VE TERFİ KONTROLÜ
     if secilen.upper() == 'P' and terfi:
         tahta[h_sat][h_sut] = terfi.upper() if beyaz_sirasi else terfi.lower()
     else:
         tahta[h_sat][h_sut] = secilen
     tahta[b_sat][b_sut] = ' '
 
-    # OYNAMA BAYRAKLARI
     if secilen == 'K': beyaz_sah_oynadi = True
     elif secilen == 'k': siyah_sah_oynadi = True
     elif secilen == 'R':
