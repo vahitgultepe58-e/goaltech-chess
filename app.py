@@ -90,7 +90,9 @@ def yeni_oda_olustur(sure_dakika=3):
         'beyaz_sure': sure_dakika * 60,
         'siyah_sure': sure_dakika * 60,
         'son_zaman': time.time(),
-        'oyun_basladi': False
+        'oyun_basladi': False,
+        'siyah_baglandi': False,
+        'beyaz_baglandi': False
     }
     oda['konum_gecmisi'][tahta_durum_anahtari(oda)] = 1
     return oda
@@ -270,7 +272,7 @@ def yetersiz_materyal_mi(tahta):
     return False
 
 # =====================================================================
-# 4. ARAYÜZ (HTML / CSS / JS) - OPTİMİZE EDİLMİŞ PERFORMANS
+# 4. ARAYÜZ (HTML / CSS / JS) - OPTİMİZE EDİLMİŞ PERFORMANS VE BEKLEME SALONU
 # =====================================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
@@ -324,7 +326,13 @@ HTML_PAGE = """<!DOCTYPE html>
         .clock-display.danger { color: #ef4444; }
         .caps { font-size: 16px; min-height: 20px; color: #64748b; margin-top: 4px; }
 
-        .board-wrapper { position: relative; padding: 6px; background: #161d2b; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.06); }
+        .board-wrapper { position: relative; padding: 6px; background: #161d2b; border-radius: 16px; box-shadow: 0 20px 40px rgba(0,0,0,0.7); border: 2px solid rgba(255,255,255,0.06); transition: 0.3s; }
+        .board-wrapper.waiting { filter: grayscale(0.8) brightness(0.6); pointer-events: none; }
+        .waiting-overlay { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; z-index: 50; flex-direction: column; text-align: center; }
+        .board-wrapper.waiting .waiting-overlay { display: flex; }
+        .wait-text { font-size: 18px; font-weight: 800; color: #fff; background: rgba(11, 15, 23, 0.9); padding: 10px 20px; border-radius: 12px; border: 1px solid var(--primary); box-shadow: 0 0 20px rgba(59, 130, 246, 0.5); }
+        .wait-sub { display: block; font-size: 12px; color: #94a3b8; font-weight: 600; margin-top: 6px; }
+
         .board { display: grid; grid-template-columns: repeat(8, 62px); grid-template-rows: repeat(8, 62px); border-radius: 10px; overflow: hidden; }
         @media (max-width: 530px) {
             .board { grid-template-columns: repeat(8, 43px); grid-template-rows: repeat(8, 43px); }
@@ -408,14 +416,21 @@ HTML_PAGE = """<!DOCTYPE html>
             </div>
         </div>
 
-        <div class="board-wrapper">
+        <!-- TAHTA VE BEKLEME EKRANI -->
+        <div class="board-wrapper" id="board-container">
+            <div class="waiting-overlay">
+                <div class="wait-text">
+                    Bağlantı Bekleniyor... ⏳
+                    <span class="wait-sub">Arkadaşının odaya girmesi bekleniyor</span>
+                </div>
+            </div>
             <div class="board" id="board"></div>
         </div>
 
         <div id="msg"></div>
 
         <div class="action-grid">
-            <button class="btn-modern btn-share" onclick="copyInviteLink()">
+            <button class="btn-modern btn-share" onclick="nativeShare()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
                 Paylaş
             </button>
@@ -456,15 +471,25 @@ HTML_PAGE = """<!DOCTYPE html>
         let isProcessing = false;
         let pendingMove = null;
         let pollingTimer = null;
-        let domSquares = []; // DOM Cache array
+        let domSquares = []; 
+        let isBothConnected = false;
 
-        if (playerName) showGame();
+        if (playerName) {
+            // Doğrudan sayfayı yenilediyse bağlantı kaydını yap
+            joinRoomLogic();
+            showGame();
+        }
 
-        function joinGame() {
+        async function joinGame() {
             const u = document.getElementById('username').value.trim() || 'Oyuncu';
             playerName = u;
             localStorage.setItem('goaltech_player', playerName);
+            await joinRoomLogic();
             showGame();
+        }
+
+        async function joinRoomLogic() {
+            await fetch('/api/join?oda=' + currentRoom + '&taraf=' + mySide, { method: 'POST' });
         }
 
         function showGame() {
@@ -472,11 +497,35 @@ HTML_PAGE = """<!DOCTYPE html>
             document.getElementById('game-screen').style.display = 'flex';
             document.getElementById('role-badge').innerText = playerName + ' (' + (mySide === 'beyaz' ? 'Beyaz ♔' : 'Siyah ♚') + ')';
             
-            initBoard(); // Initialize the board DOM ONLY ONCE
+            initBoard(); 
             fetchState();
             
-            // Senkronizasyon gecikmesini 1 saniyeden 300 ms'ye (süper hızlı) düşürdük
             if (!pollingTimer) pollingTimer = setInterval(fetchState, 300);
+        }
+
+        // YENİ PAYLAŞIM SİSTEMİ (Web Share API)
+        async function nativeShare() {
+            const fullLink = window.location.origin + window.location.pathname + '?oda=' + currentRoom;
+            
+            // Eğer cihaz native paylaşımı (WhatsApp, Telegram vb) destekliyorsa onu aç:
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Goaltech Satranç Arenası',
+                        text: 'Sana meydan okuyorum! Hemen linke tıkla ve maça bağlan:',
+                        url: fullLink
+                    });
+                } catch (err) {
+                    console.log('Paylaşım iptal edildi veya desteklenmiyor.', err);
+                }
+            } else {
+                // Desteklemeyen bilgisayarlarda kopyalama yedeği (Fallback)
+                navigator.clipboard.writeText(fullLink).then(() => {
+                    const toast = document.getElementById('toast');
+                    toast.classList.add('show');
+                    setTimeout(() => toast.classList.remove('show'), 2500);
+                });
+            }
         }
 
         function formatTime(seconds) {
@@ -493,15 +542,6 @@ HTML_PAGE = """<!DOCTYPE html>
             await fetchState();
         }
 
-        function copyInviteLink() {
-            const fullLink = window.location.origin + window.location.pathname + '?oda=' + currentRoom;
-            navigator.clipboard.writeText(fullLink).then(() => {
-                const toast = document.getElementById('toast');
-                toast.classList.add('show');
-                setTimeout(() => toast.classList.remove('show'), 2500);
-            });
-        }
-
         async function leaveGame() {
             clearInterval(pollingTimer);
             pollingTimer = null;
@@ -510,7 +550,6 @@ HTML_PAGE = """<!DOCTYPE html>
             window.location.href = window.location.origin + window.location.pathname;
         }
 
-        // 1. Yeni Özellik: Tahtayı 1 kere oluşturup hafızada tutar. Her saniye yeniden sil-yaz yapmaz.
         function initBoard() {
             const bEl = document.getElementById('board');
             bEl.innerHTML = '';
@@ -538,7 +577,16 @@ HTML_PAGE = """<!DOCTYPE html>
                 boardState = data.tahta;
                 whiteTurn = data.beyaz_sirasi;
                 isCheck = data.sah_tehdit;
+                isBothConnected = data.siyah_baglandi && data.beyaz_baglandi;
                 
+                // Bekleme ekranını yönet
+                const wrapper = document.getElementById('board-container');
+                if (!isBothConnected) {
+                    wrapper.classList.add('waiting');
+                } else {
+                    wrapper.classList.remove('waiting');
+                }
+
                 document.getElementById('w-score').innerText = data.b_skor;
                 document.getElementById('w-caps').innerText = data.y_siyah.join(' ');
                 document.getElementById('b-score').innerText = data.s_skor;
@@ -556,15 +604,15 @@ HTML_PAGE = """<!DOCTYPE html>
                 });
 
                 if (data.mesaj) document.getElementById('msg').innerText = data.mesaj;
+                else document.getElementById('msg').innerText = '';
 
                 document.getElementById('card-white').classList.toggle('active-turn', whiteTurn);
                 document.getElementById('card-black').classList.toggle('active-turn', !whiteTurn);
 
-                render(); // Çağır ama sadece değişiklikleri yazacak
+                render();
             } catch(e) {}
         }
 
-        // 2. Yeni Özellik: Sıfırdan HTML yazmak yerine yalnızca içeriği değişen kutuları günceller
         function render() {
             if (boardState.length === 0) return;
 
@@ -586,12 +634,14 @@ HTML_PAGE = """<!DOCTYPE html>
                     if (validMoves.some(m => m[0] === r && m[1] === c)) innerStr += `<div class="valid-dot"></div>`;
 
                     if (sq.className !== classStr) sq.className = classStr;
-                    if (sq.innerHTML !== innerStr) sq.innerHTML = innerStr; // Sadece değiştiyse yaz
+                    if (sq.innerHTML !== innerStr) sq.innerHTML = innerStr;
                 }
             }
         }
 
         async function onSquareClick(r, c) {
+            if (!isBothConnected) return; // İki kişi bağlanmadan tahtaya dokunulamaz
+            
             const isMyTurn = (mySide === 'beyaz' && whiteTurn) || (mySide === 'siyah' && !whiteTurn);
             if (!isMyTurn || isProcessing) return;
 
@@ -667,7 +717,7 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         async function undoGame() {
-            if (isProcessing) return;
+            if (isProcessing || !isBothConnected) return;
             isProcessing = true;
             await fetch('/api/undo?oda=' + currentRoom, { method: 'POST' });
             selected = null; validMoves = [];
@@ -689,6 +739,14 @@ def get_or_create_room(oda_id):
 @app.route('/')
 def home():
     return HTML_PAGE
+
+@app.route('/api/join', methods=['POST'])
+def api_join():
+    oda = get_or_create_room(request.args.get('oda', 'varsayilan'))
+    taraf = request.args.get('taraf', 'beyaz')
+    if taraf == 'beyaz': oda['beyaz_baglandi'] = True
+    if taraf == 'siyah': oda['siyah_baglandi'] = True
+    return jsonify({'success': True})
 
 @app.route('/api/set_time', methods=['POST'])
 def api_set_time():
@@ -713,7 +771,9 @@ def api_state():
         'y_beyaz': oda['y_beyaz'], 'y_siyah': oda['y_siyah'], 'mesaj': oda['mesaj'],
         'secili_dakika': oda['secili_dakika'],
         'beyaz_sure': round(oda['beyaz_sure']),
-        'siyah_sure': round(oda['siyah_sure'])
+        'siyah_sure': round(oda['siyah_sure']),
+        'beyaz_baglandi': oda['beyaz_baglandi'],
+        'siyah_baglandi': oda['siyah_baglandi']
     })
 
 @app.route('/api/valid_moves', methods=['POST'])
