@@ -7,10 +7,8 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 # =====================================================================
-# 1. GÜVENLİK VE VERİTABANI
+# 1. VERİTABANI VE ŞİFRELEME
 # =====================================================================
-KAYITLI_KULLANICI = "vahit"
-KAYITLI_SIFRE = "yasin12345"
 SECRET_KEY = "goaltech_secret_key"
 DB_ANAHTAR = "GOALTECH_GIZLI"
 
@@ -46,11 +44,6 @@ def mac_kaydet(oyuncu_adi, b_skor, s_skor, kazanan_taraf):
         print("DB HATA:", e)
 
 veritabanini_kur()
-
-def token_uret(kullanici_adi):
-    payload = {"oyuncu": kullanici_adi, "oyun": "Goaltech Chess", "exp": int(time.time()) + 86400}
-    res = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
-    return res if isinstance(res, str) else res.decode('utf-8')
 
 # =====================================================================
 # 2. ODA YÖNETİMİ
@@ -298,10 +291,10 @@ HTML_PAGE = """<!DOCTYPE html>
         * { box-sizing: border-box; font-family: 'Outfit', sans-serif; }
         body { background: var(--bg-color); color: #fff; margin: 0; padding: 0; min-height: 100vh; overflow-x: hidden; background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b0f17 75%); }
 
-        /* GİRİŞ EKRANI */
-        #login-screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(14px); background: rgba(11, 15, 23, 0.85); }
-        .login-box { background: var(--card-bg); border: 1px solid var(--card-border); padding: 36px; border-radius: 24px; text-align: center; width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
-        .login-box h1 { margin: 0 0 16px; font-size: 32px; font-weight: 800; letter-spacing: -1px; }
+        /* KARŞILAMA VE RUMUZ EKRANI (ŞİFRESİZ) */
+        #welcome-screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(14px); background: rgba(11, 15, 23, 0.85); }
+        .welcome-box { background: var(--card-bg); border: 1px solid var(--card-border); padding: 36px; border-radius: 24px; text-align: center; width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+        .welcome-box h1 { margin: 0 0 16px; font-size: 32px; font-weight: 800; letter-spacing: -1px; }
         .input-group { margin-bottom: 14px; text-align: left; }
         .input-group label { display: block; font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
         .input-group input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(11, 15, 23, 0.6); color: #fff; font-size: 15px; outline: none; transition: 0.2s; }
@@ -371,20 +364,15 @@ HTML_PAGE = """<!DOCTYPE html>
 
     <div id="toast">Bağlantı Panoya Kopyalandı! 🚀</div>
 
-    <!-- GİRİŞ PORTALI -->
-    <div id="login-screen">
-        <div class="login-box">
+    <!-- RUMUZ SEÇİM EKRANI -->
+    <div id="welcome-screen">
+        <div class="welcome-box">
             <h1>GOALTECH</h1>
             <div class="input-group">
-                <label>Kullanıcı Adı</label>
-                <input type="text" id="username" value="vahit">
+                <label>Oyuncu Adı</label>
+                <input type="text" id="username" value="Oyuncu_1">
             </div>
-            <div class="input-group">
-                <label>Şifre</label>
-                <input type="password" id="password" value="yasin12345">
-            </div>
-            <button class="btn-main" onclick="doLogin()">Giriş Yap</button>
-            <div id="login-err" style="color:#ef4444; font-size:12px; font-weight:700; margin-top:12px;"></div>
+            <button class="btn-main" onclick="joinGame()">Oyuna Başla</button>
         </div>
     </div>
 
@@ -434,7 +422,7 @@ HTML_PAGE = """<!DOCTYPE html>
                 Paylaş
             </button>
             <button class="btn-modern btn-undo" onclick="undoGame()">↩ Geri Al</button>
-            <button class="btn-modern btn-logout" onclick="logout()">Çıkış Yap</button>
+            <button class="btn-modern btn-logout" onclick="leaveGame()">Ayrıl</button>
         </div>
     </div>
 
@@ -465,36 +453,25 @@ HTML_PAGE = """<!DOCTYPE html>
         let currentRoom = urlParams.get('oda') || 'oda_' + Math.random().toString(36).substring(2, 8);
         let mySide = urlParams.get('oda') ? 'siyah' : 'beyaz';
 
-        let token = localStorage.getItem('goaltech_token');
+        let playerName = localStorage.getItem('goaltech_player');
         let boardState = [], selected = null, validMoves = [], whiteTurn = true, isCheck = false;
         let isProcessing = false;
         let pendingMove = null;
         let pollingTimer = null;
 
-        if (token) showGame();
+        if (playerName) showGame();
 
-        async function doLogin() {
-            const u = document.getElementById('username').value.trim();
-            const p = document.getElementById('password').value.trim();
-            const res = await fetch('/api/login', {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: u, password: p})
-            });
-            const data = await res.json();
-            if (data.success) {
-                token = data.token;
-                localStorage.setItem('goaltech_token', token);
-                document.getElementById('login-err').innerText = '';
-                showGame();
-            } else {
-                document.getElementById('login-err').innerText = data.error;
-            }
+        function joinGame() {
+            const u = document.getElementById('username').value.trim() || 'Oyuncu';
+            playerName = u;
+            localStorage.setItem('goaltech_player', playerName);
+            showGame();
         }
 
         function showGame() {
-            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('welcome-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'flex';
-            document.getElementById('role-badge').innerText = 'Tarafın: ' + (mySide === 'beyaz' ? 'Beyaz ♔' : 'Siyah ♚');
+            document.getElementById('role-badge').innerText = playerName + ' (' + (mySide === 'beyaz' ? 'Beyaz ♔' : 'Siyah ♚') + ')';
             fetchState();
             if (!pollingTimer) pollingTimer = setInterval(fetchState, 1000);
         }
@@ -507,7 +484,7 @@ HTML_PAGE = """<!DOCTYPE html>
 
         async function setTimeLimit(mins) {
             await fetch('/api/set_time?oda=' + currentRoom, {
-                method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+                method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ minutes: mins })
             });
             await fetchState();
@@ -522,19 +499,17 @@ HTML_PAGE = """<!DOCTYPE html>
             });
         }
 
-        async function logout() {
+        async function leaveGame() {
             clearInterval(pollingTimer);
             pollingTimer = null;
-            await fetch('/api/reset?oda=' + currentRoom, { method: 'POST', headers: {'Authorization': 'Bearer ' + token} });
-            token = null;
-            localStorage.removeItem('goaltech_token');
+            await fetch('/api/reset?oda=' + currentRoom, { method: 'POST' });
+            localStorage.removeItem('goaltech_player');
             window.location.href = window.location.origin + window.location.pathname;
         }
 
         async function fetchState() {
             try {
-                const res = await fetch('/api/state?oda=' + currentRoom, { headers: {'Authorization': 'Bearer ' + token} });
-                if (res.status === 401) { logout(); return; }
+                const res = await fetch('/api/state?oda=' + currentRoom);
                 const data = await res.json();
                 boardState = data.tahta;
                 whiteTurn = data.beyaz_sirasi;
@@ -623,7 +598,7 @@ HTML_PAGE = """<!DOCTYPE html>
                 selected = [r, c];
                 isProcessing = true;
                 const res = await fetch('/api/valid_moves?oda=' + currentRoom, {
-                    method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
+                    method: 'POST', headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ r, c })
                 });
                 const data = await res.json();
@@ -661,8 +636,8 @@ HTML_PAGE = """<!DOCTYPE html>
         async function sendMove(from, to, promo = null) {
             isProcessing = true;
             const res = await fetch('/api/move?oda=' + currentRoom, {
-                method: 'POST', headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token},
-                body: JSON.stringify({ from: from, to: to, promotion: promo })
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ from: from, to: to, promotion: promo, oyuncu: playerName })
             });
             const data = await res.json();
             if (data.success) {
@@ -677,7 +652,7 @@ HTML_PAGE = """<!DOCTYPE html>
         async function undoGame() {
             if (isProcessing) return;
             isProcessing = true;
-            await fetch('/api/undo?oda=' + currentRoom, { method: 'POST', headers: {'Authorization': 'Bearer ' + token} });
+            await fetch('/api/undo?oda=' + currentRoom, { method: 'POST' });
             selected = null; validMoves = [];
             await fetchState();
             isProcessing = false;
@@ -694,32 +669,12 @@ def get_or_create_room(oda_id):
         odalar[oda_id] = yeni_oda_olustur()
     return odalar[oda_id]
 
-def token_dogrula(req):
-    auth = req.headers.get('Authorization', '')
-    if auth.startswith('Bearer '):
-        t = auth.split(' ')[1]
-        try:
-            return jwt.decode(t, SECRET_KEY, algorithms=["HS256"])
-        except:
-            return None
-    return None
-
 @app.route('/')
 def home():
     return HTML_PAGE
 
-@app.route('/api/login', methods=['POST'])
-def api_login():
-    data = request.json or {}
-    u = str(data.get('username', '')).strip().lower()
-    p = str(data.get('password', '')).strip()
-    if u == KAYITLI_KULLANICI.lower() and p == KAYITLI_SIFRE:
-        return jsonify({'success': True, 'token': token_uret(u)})
-    return jsonify({'success': False, 'error': 'Hatalı kullanıcı adı veya şifre!'})
-
 @app.route('/api/set_time', methods=['POST'])
 def api_set_time():
-    if not token_dogrula(request): return jsonify({'error': 'Yetkisiz erişim'}), 401
     oda = get_or_create_room(request.args.get('oda', 'varsayilan'))
     mins = int(request.json.get('minutes', 3))
     oda['secili_dakika'] = mins
@@ -731,7 +686,6 @@ def api_set_time():
 
 @app.route('/api/state')
 def api_state():
-    if not token_dogrula(request): return jsonify({'error': 'Yetkisiz erişim'}), 401
     oda = get_or_create_room(request.args.get('oda', 'varsayilan'))
     sure_guncelle(oda)
     k_sat, k_sut = sah_konumu_bul(oda['tahta'], oda['beyaz_sirasi'])
@@ -747,19 +701,18 @@ def api_state():
 
 @app.route('/api/valid_moves', methods=['POST'])
 def api_valid():
-    if not token_dogrula(request): return jsonify({'error': 'Yetkisiz erişim'}), 401
     oda = get_or_create_room(request.args.get('oda', 'varsayilan'))
     req = request.json or {}
     return jsonify({'moves': gecerli_hamleleri_bul(oda, req.get('r'), req.get('c'), oda['beyaz_sirasi'])})
 
 @app.route('/api/move', methods=['POST'])
 def api_move():
-    if not token_dogrula(request): return jsonify({'error': 'Yetkisiz erişim'}), 401
     oda = get_or_create_room(request.args.get('oda', 'varsayilan'))
     data = request.json or {}
     b_sat, b_sut = data.get('from')
     h_sat, h_sut = data.get('to')
     terfi = data.get('promotion')
+    oyuncu = data.get('oyuncu', 'Bilinmeyen')
     
     tahta = oda['tahta']
     secilen = tahta[b_sat][b_sut]
@@ -840,25 +793,24 @@ def api_move():
         if tehdit:
             kazanan = 'Beyaz' if not oda['beyaz_sirasi'] else 'Siyah'
             oda['mesaj'] = f"ŞAH MAT! {kazanan} Kazandı!"
-            mac_kaydet("vahit", oda['b_skor'], oda['s_skor'], kazanan)
+            mac_kaydet(oyuncu, oda['b_skor'], oda['s_skor'], kazanan)
         else:
             oda['mesaj'] = "PAT! Oyun Berabere."
-            mac_kaydet("vahit", oda['b_skor'], oda['s_skor'], "BERABERE")
+            mac_kaydet(oyuncu, oda['b_skor'], oda['s_skor'], "BERABERE")
     elif oda['elli_sayac'] >= 100:
         oda['mesaj'] = "50 Hamle Kuralı Nedeniyle Berabere!"
-        mac_kaydet("vahit", oda['b_skor'], oda['s_skor'], "BERABERE")
+        mac_kaydet(oyuncu, oda['b_skor'], oda['s_skor'], "BERABERE")
     elif oda['konum_gecmisi'].get(durum_anahtari, 0) >= 3:
         oda['mesaj'] = "3 Kez Konum Tekrarı Nedeniyle Berabere!"
-        mac_kaydet("vahit", oda['b_skor'], oda['s_skor'], "BERABERE")
+        mac_kaydet(oyuncu, oda['b_skor'], oda['s_skor'], "BERABERE")
     elif yetersiz_materyal_mi(tahta):
         oda['mesaj'] = "Yetersiz Materyal Nedeniyle Berabere!"
-        mac_kaydet("vahit", oda['b_skor'], oda['s_skor'], "BERABERE")
+        mac_kaydet(oyuncu, oda['b_skor'], oda['s_skor'], "BERABERE")
 
     return jsonify({'success': True})
 
 @app.route('/api/undo', methods=['POST'])
 def api_undo():
-    if not token_dogrula(request): return jsonify({'error': 'Yetkisiz erişim'}), 401
     oda = get_or_create_room(request.args.get('oda', 'varsayilan'))
     if oda['hamle_gecmisi']:
         eski = oda['hamle_gecmisi'].pop()
@@ -875,7 +827,6 @@ def api_undo():
 
 @app.route('/api/reset', methods=['POST'])
 def api_reset():
-    if not token_dogrula(request): return jsonify({'error': 'Yetkisiz erişim'}), 401
     oda_id = request.args.get('oda', 'varsayilan')
     if oda_id in odalar:
         odalar[oda_id] = yeni_oda_olustur(odalar[oda_id]['secili_dakika'])
