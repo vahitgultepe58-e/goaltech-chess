@@ -270,7 +270,7 @@ def yetersiz_materyal_mi(tahta):
     return False
 
 # =====================================================================
-# 4. ARAYÜZ (HTML / CSS / JS)
+# 4. ARAYÜZ (HTML / CSS / JS) - OPTİMİZE EDİLMİŞ PERFORMANS
 # =====================================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
@@ -291,7 +291,6 @@ HTML_PAGE = """<!DOCTYPE html>
         * { box-sizing: border-box; font-family: 'Outfit', sans-serif; }
         body { background: var(--bg-color); color: #fff; margin: 0; padding: 0; min-height: 100vh; overflow-x: hidden; background-image: radial-gradient(circle at 50% 0%, #1e293b 0%, #0b0f17 75%); }
 
-        /* KARŞILAMA VE RUMUZ EKRANI (ŞİFRESİZ) */
         #welcome-screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(14px); background: rgba(11, 15, 23, 0.85); }
         .welcome-box { background: var(--card-bg); border: 1px solid var(--card-border); padding: 36px; border-radius: 24px; text-align: center; width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
         .welcome-box h1 { margin: 0 0 16px; font-size: 32px; font-weight: 800; letter-spacing: -1px; }
@@ -302,7 +301,6 @@ HTML_PAGE = """<!DOCTYPE html>
         .btn-main { width: 100%; padding: 13px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; border-radius: 12px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3); margin-top: 8px; }
         .btn-main:hover { transform: translateY(-2px); }
 
-        /* OYUN ALANI */
         #game-screen { display: none; flex-direction: column; align-items: center; padding: 16px 10px; max-width: 600px; margin: 0 auto; }
         
         .top-bar { width: 100%; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; background: var(--card-bg); padding: 10px 16px; border-radius: 16px; border: 1px solid var(--card-border); }
@@ -318,7 +316,7 @@ HTML_PAGE = """<!DOCTYPE html>
         .time-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
 
         .status-container { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
-        .score-card { background: var(--card-bg); border: 1px solid var(--card-border); padding: 12px; border-radius: 14px; display: flex; flex-direction: column; justify-content: space-between; }
+        .score-card { background: var(--card-bg); border: 1px solid var(--card-border); padding: 12px; border-radius: 14px; display: flex; flex-direction: column; justify-content: space-between; transition: 0.2s; }
         .score-card.active-turn { border-color: var(--gold); box-shadow: 0 0 15px rgba(245, 158, 11, 0.15); }
         .card-header { display: flex; justify-content: space-between; align-items: center; }
         .score-card .title { font-size: 12px; font-weight: 700; color: #94a3b8; text-transform: uppercase; }
@@ -458,6 +456,7 @@ HTML_PAGE = """<!DOCTYPE html>
         let isProcessing = false;
         let pendingMove = null;
         let pollingTimer = null;
+        let domSquares = []; // DOM Cache array
 
         if (playerName) showGame();
 
@@ -472,8 +471,12 @@ HTML_PAGE = """<!DOCTYPE html>
             document.getElementById('welcome-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'flex';
             document.getElementById('role-badge').innerText = playerName + ' (' + (mySide === 'beyaz' ? 'Beyaz ♔' : 'Siyah ♚') + ')';
+            
+            initBoard(); // Initialize the board DOM ONLY ONCE
             fetchState();
-            if (!pollingTimer) pollingTimer = setInterval(fetchState, 1000);
+            
+            // Senkronizasyon gecikmesini 1 saniyeden 300 ms'ye (süper hızlı) düşürdük
+            if (!pollingTimer) pollingTimer = setInterval(fetchState, 300);
         }
 
         function formatTime(seconds) {
@@ -507,6 +510,27 @@ HTML_PAGE = """<!DOCTYPE html>
             window.location.href = window.location.origin + window.location.pathname;
         }
 
+        // 1. Yeni Özellik: Tahtayı 1 kere oluşturup hafızada tutar. Her saniye yeniden sil-yaz yapmaz.
+        function initBoard() {
+            const bEl = document.getElementById('board');
+            bEl.innerHTML = '';
+            domSquares = [];
+            const isFlipped = (mySide === 'siyah');
+
+            for (let i = 0; i < 8; i++) {
+                let row = [];
+                for (let j = 0; j < 8; j++) {
+                    const r = isFlipped ? (7 - i) : i;
+                    const c = isFlipped ? (7 - j) : j;
+                    const sq = document.createElement('div');
+                    sq.onmousedown = (e) => { e.preventDefault(); onSquareClick(r, c); };
+                    bEl.appendChild(sq);
+                    row.push({ elem: sq, r: r, c: c });
+                }
+                domSquares.push(row);
+            }
+        }
+
         async function fetchState() {
             try {
                 const res = await fetch('/api/state?oda=' + currentRoom);
@@ -536,40 +560,33 @@ HTML_PAGE = """<!DOCTYPE html>
                 document.getElementById('card-white').classList.toggle('active-turn', whiteTurn);
                 document.getElementById('card-black').classList.toggle('active-turn', !whiteTurn);
 
-                render();
+                render(); // Çağır ama sadece değişiklikleri yazacak
             } catch(e) {}
         }
 
+        // 2. Yeni Özellik: Sıfırdan HTML yazmak yerine yalnızca içeriği değişen kutuları günceller
         function render() {
-            const bEl = document.getElementById('board');
-            bEl.innerHTML = '';
-            const isFlipped = (mySide === 'siyah');
+            if (boardState.length === 0) return;
 
             for (let i = 0; i < 8; i++) {
                 for (let j = 0; j < 8; j++) {
-                    const r = isFlipped ? (7 - i) : i;
-                    const c = isFlipped ? (7 - j) : j;
-
-                    const sq = document.createElement('div');
-                    sq.className = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+                    const cacheData = domSquares[i][j];
+                    const r = cacheData.r;
+                    const c = cacheData.c;
+                    const sq = cacheData.elem;
                     const piece = boardState[r][c];
 
-                    if (piece !== ' ') {
-                        const img = document.createElement('img');
-                        img.src = IMAGES[piece];
-                        sq.appendChild(img);
-                    }
+                    let classStr = 'square ' + ((r + c) % 2 === 0 ? 'light' : 'dark');
+                    let innerStr = '';
 
-                    if (selected && selected[0] === r && selected[1] === c) sq.classList.add('selected');
-                    if (isCheck && ((whiteTurn && piece === 'K') || (!whiteTurn && piece === 'k'))) sq.classList.add('in-check');
-                    if (validMoves.some(m => m[0] === r && m[1] === c)) {
-                        const dot = document.createElement('div');
-                        dot.className = 'valid-dot';
-                        sq.appendChild(dot);
-                    }
+                    if (piece !== ' ') innerStr += `<img src="${IMAGES[piece]}">`;
+                    
+                    if (selected && selected[0] === r && selected[1] === c) classStr += ' selected';
+                    if (isCheck && ((whiteTurn && piece === 'K') || (!whiteTurn && piece === 'k'))) classStr += ' in-check';
+                    if (validMoves.some(m => m[0] === r && m[1] === c)) innerStr += `<div class="valid-dot"></div>`;
 
-                    sq.onmousedown = (e) => { e.preventDefault(); onSquareClick(r, c); };
-                    bEl.appendChild(sq);
+                    if (sq.className !== classStr) sq.className = classStr;
+                    if (sq.innerHTML !== innerStr) sq.innerHTML = innerStr; // Sadece değiştiyse yaz
                 }
             }
         }
