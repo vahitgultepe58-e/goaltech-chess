@@ -272,13 +272,14 @@ def yetersiz_materyal_mi(tahta):
     return False
 
 # =====================================================================
-# 4. ARAYÜZ (HTML / CSS / JS) - OPTİMİZE EDİLMİŞ PERFORMANS VE BEKLEME SALONU
+# 4. HTML ARAYÜZ (GÜVENLİK META ETİKETİ EKLENDİ)
 # =====================================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-site-verification" content="lIdhFOFea-Gne9dwQpDCUbceGuTWtpOVv-SRFOeaw-o" />
     <title>Goaltech Chess Online</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
     <style>
@@ -370,7 +371,6 @@ HTML_PAGE = """<!DOCTYPE html>
 
     <div id="toast">Bağlantı Panoya Kopyalandı! 🚀</div>
 
-    <!-- RUMUZ SEÇİM EKRANI -->
     <div id="welcome-screen">
         <div class="welcome-box">
             <h1>GOALTECH</h1>
@@ -382,7 +382,6 @@ HTML_PAGE = """<!DOCTYPE html>
         </div>
     </div>
 
-    <!-- OYUN ALANI -->
     <div id="game-screen">
         <div class="top-bar">
             <div class="logo-title">GOALTECH <span>CHESS</span></div>
@@ -416,7 +415,6 @@ HTML_PAGE = """<!DOCTYPE html>
             </div>
         </div>
 
-        <!-- TAHTA VE BEKLEME EKRANI -->
         <div class="board-wrapper" id="board-container">
             <div class="waiting-overlay">
                 <div class="wait-text">
@@ -475,7 +473,6 @@ HTML_PAGE = """<!DOCTYPE html>
         let isBothConnected = false;
 
         if (playerName) {
-            // Doğrudan sayfayı yenilediyse bağlantı kaydını yap
             joinRoomLogic();
             showGame();
         }
@@ -503,11 +500,8 @@ HTML_PAGE = """<!DOCTYPE html>
             if (!pollingTimer) pollingTimer = setInterval(fetchState, 300);
         }
 
-        // YENİ PAYLAŞIM SİSTEMİ (Web Share API)
         async function nativeShare() {
             const fullLink = window.location.origin + window.location.pathname + '?oda=' + currentRoom;
-            
-            // Eğer cihaz native paylaşımı (WhatsApp, Telegram vb) destekliyorsa onu aç:
             if (navigator.share) {
                 try {
                     await navigator.share({
@@ -515,11 +509,8 @@ HTML_PAGE = """<!DOCTYPE html>
                         text: 'Sana meydan okuyorum! Hemen linke tıkla ve maça bağlan:',
                         url: fullLink
                     });
-                } catch (err) {
-                    console.log('Paylaşım iptal edildi veya desteklenmiyor.', err);
-                }
+                } catch (err) {}
             } else {
-                // Desteklemeyen bilgisayarlarda kopyalama yedeği (Fallback)
                 navigator.clipboard.writeText(fullLink).then(() => {
                     const toast = document.getElementById('toast');
                     toast.classList.add('show');
@@ -579,13 +570,9 @@ HTML_PAGE = """<!DOCTYPE html>
                 isCheck = data.sah_tehdit;
                 isBothConnected = data.siyah_baglandi && data.beyaz_baglandi;
                 
-                // Bekleme ekranını yönet
                 const wrapper = document.getElementById('board-container');
-                if (!isBothConnected) {
-                    wrapper.classList.add('waiting');
-                } else {
-                    wrapper.classList.remove('waiting');
-                }
+                if (!isBothConnected) wrapper.classList.add('waiting');
+                else wrapper.classList.remove('waiting');
 
                 document.getElementById('w-score').innerText = data.b_skor;
                 document.getElementById('w-caps').innerText = data.y_siyah.join(' ');
@@ -640,7 +627,7 @@ HTML_PAGE = """<!DOCTYPE html>
         }
 
         async function onSquareClick(r, c) {
-            if (!isBothConnected) return; // İki kişi bağlanmadan tahtaya dokunulamaz
+            if (!isBothConnected) return; 
             
             const isMyTurn = (mySide === 'beyaz' && whiteTurn) || (mySide === 'siyah' && !whiteTurn);
             if (!isMyTurn || isProcessing) return;
