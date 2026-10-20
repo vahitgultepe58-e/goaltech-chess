@@ -7,7 +7,7 @@ from flask import Flask, jsonify, request
 app = Flask(__name__)
 
 # =====================================================================
-# 1. GÜVENLİK, TOKEN VE VERİTABANI
+# 1. GÜVENLİK VE VERİTABANI
 # =====================================================================
 KAYITLI_KULLANICI = "vahit"
 KAYITLI_SIFRE = "yasin12345"
@@ -48,12 +48,12 @@ def mac_kaydet(oyuncu_adi, b_skor, s_skor, kazanan_taraf):
 veritabanini_kur()
 
 def token_uret(kullanici_adi):
-    payload = {"oyuncu": kullanici_adi, "oyun": "Goaltech Chess", "exp": int(time.time()) + 7200}
+    payload = {"oyuncu": kullanici_adi, "oyun": "Goaltech Chess", "exp": int(time.time()) + 86400}
     res = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
     return res if isinstance(res, str) else res.decode('utf-8')
 
 # =====================================================================
-# 2. ODA YÖNETİMİ VE TÜM OYUN VERİLERİ
+# 2. ODA YÖNETİMİ
 # =====================================================================
 SEMBOLLER = {'K':'♔','Q':'♕','R':'♖','B':'♗','N':'♘','P':'♙', 'k':'♚','q':'♛','r':'♜','b':'♝','n':'♞','p':'♟',' ':' '}
 TAS_PUANLARI = {'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9, 'K': 0}
@@ -125,7 +125,7 @@ def sure_guncelle(oda):
             oda['mesaj'] = "Siyahın süresi bitti! Sıra Beyaza geçti."
 
 # =====================================================================
-# 3. KURAL MOTORU (ROK, EN PASSANT, BERABERLİKLER)
+# 3. KURAL MOTORU
 # =====================================================================
 def yol_acik_mi(tahta, b_sat, b_sut, h_sat, h_sut):
     adim_sat = 0 if h_sat == b_sat else (1 if h_sat > b_sat else -1)
@@ -277,7 +277,7 @@ def yetersiz_materyal_mi(tahta):
     return False
 
 # =====================================================================
-# 4. MODERN ARAYÜZ (GİRİŞ KAPISI + TOKEN ROZETİ + OYUN)
+# 4. ARAYÜZ (HTML / CSS / JS)
 # =====================================================================
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
@@ -301,13 +301,12 @@ HTML_PAGE = """<!DOCTYPE html>
         /* GİRİŞ EKRANI */
         #login-screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 100; backdrop-filter: blur(14px); background: rgba(11, 15, 23, 0.85); }
         .login-box { background: var(--card-bg); border: 1px solid var(--card-border); padding: 36px; border-radius: 24px; text-align: center; width: 340px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
-        .login-box h1 { margin: 0 0 4px; font-size: 30px; font-weight: 800; letter-spacing: -1px; }
-        .login-box p { color: #64748b; font-size: 13px; margin-bottom: 22px; font-weight: 600; }
+        .login-box h1 { margin: 0 0 16px; font-size: 32px; font-weight: 800; letter-spacing: -1px; }
         .input-group { margin-bottom: 14px; text-align: left; }
         .input-group label { display: block; font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px; }
         .input-group input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(11, 15, 23, 0.6); color: #fff; font-size: 15px; outline: none; transition: 0.2s; }
         .input-group input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
-        .btn-main { width: 100%; padding: 13px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; border-radius: 12px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3); }
+        .btn-main { width: 100%; padding: 13px; background: linear-gradient(135deg, #2563eb, #1d4ed8); border: none; border-radius: 12px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; transition: 0.2s; box-shadow: 0 10px 20px rgba(37, 99, 235, 0.3); margin-top: 8px; }
         .btn-main:hover { transform: translateY(-2px); }
 
         /* OYUN ALANI */
@@ -357,10 +356,6 @@ HTML_PAGE = """<!DOCTYPE html>
 
         #msg { margin-top: 10px; font-size: 15px; font-weight: 700; color: #f87171; min-height: 22px; text-align: center; }
 
-        /* TOKEN ROZETİ (ŞIK VE SADE) */
-        .token-badge { margin-top: 14px; font-size: 11px; color: #64748b; font-family: 'JetBrains Mono', monospace; background: rgba(255,255,255,0.03); border: 1px dashed var(--card-border); padding: 6px 14px; border-radius: 20px; display: flex; align-items: center; gap: 8px; }
-        .token-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; box-shadow: 0 0 8px #10b981; }
-
         #toast { position: fixed; bottom: 30px; background: #10b981; color: white; padding: 10px 20px; border-radius: 30px; font-weight: 700; font-size: 13px; opacity: 0; pointer-events: none; transition: 0.3s; z-index: 300; }
         #toast.show { opacity: 1; transform: translateY(-10px); }
 
@@ -380,7 +375,6 @@ HTML_PAGE = """<!DOCTYPE html>
     <div id="login-screen">
         <div class="login-box">
             <h1>GOALTECH</h1>
-            <p>JWT Korumalı Satranç Arenası</p>
             <div class="input-group">
                 <label>Kullanıcı Adı</label>
                 <input type="text" id="username" value="vahit">
@@ -389,7 +383,7 @@ HTML_PAGE = """<!DOCTYPE html>
                 <label>Şifre</label>
                 <input type="password" id="password" value="yasin12345">
             </div>
-            <button class="btn-main" onclick="doLogin()">Giriş Yap & Token Al</button>
+            <button class="btn-main" onclick="doLogin()">Giriş Yap</button>
             <div id="login-err" style="color:#ef4444; font-size:12px; font-weight:700; margin-top:12px;"></div>
         </div>
     </div>
@@ -442,12 +436,6 @@ HTML_PAGE = """<!DOCTYPE html>
             <button class="btn-modern btn-undo" onclick="undoGame()">↩ Geri Al</button>
             <button class="btn-modern btn-logout" onclick="logout()">Çıkış Yap</button>
         </div>
-
-        <!-- DOĞRULANMIŞ TOKEN ROZETİ -->
-        <div class="token-badge">
-            <span class="token-dot"></span>
-            <span>JWT Bilet Doğrulandı: <strong id="token-preview" style="color:#94a3b8;"></strong></span>
-        </div>
     </div>
 
     <div id="promo-modal">
@@ -486,8 +474,8 @@ HTML_PAGE = """<!DOCTYPE html>
         if (token) showGame();
 
         async function doLogin() {
-            const u = document.getElementById('username').value;
-            const p = document.getElementById('password').value;
+            const u = document.getElementById('username').value.trim();
+            const p = document.getElementById('password').value.trim();
             const res = await fetch('/api/login', {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: u, password: p})
@@ -507,7 +495,6 @@ HTML_PAGE = """<!DOCTYPE html>
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'flex';
             document.getElementById('role-badge').innerText = 'Tarafın: ' + (mySide === 'beyaz' ? 'Beyaz ♔' : 'Siyah ♚');
-            document.getElementById('token-preview').innerText = token.substring(0, 18) + '...';
             fetchState();
             if (!pollingTimer) pollingTimer = setInterval(fetchState, 1000);
         }
@@ -700,7 +687,7 @@ HTML_PAGE = """<!DOCTYPE html>
 </html>"""
 
 # =====================================================================
-# 5. API ROTLARI VE TOKEN DOĞRULAMA
+# 5. API ROTLARI
 # =====================================================================
 def get_or_create_room(oda_id):
     if oda_id not in odalar:
@@ -724,8 +711,9 @@ def home():
 @app.route('/api/login', methods=['POST'])
 def api_login():
     data = request.json or {}
-    u, p = data.get('username'), data.get('password')
-    if u == KAYITLI_KULLANICI and p == KAYITLI_SIFRE:
+    u = str(data.get('username', '')).strip().lower()
+    p = str(data.get('password', '')).strip()
+    if u == KAYITLI_KULLANICI.lower() and p == KAYITLI_SIFRE:
         return jsonify({'success': True, 'token': token_uret(u)})
     return jsonify({'success': False, 'error': 'Hatalı kullanıcı adı veya şifre!'})
 
@@ -784,7 +772,6 @@ def api_move():
     oda['oyun_basladi'] = True
     oda['son_zaman'] = time.time()
 
-    # Zaman Makinesi (Undo)
     oda['hamle_gecmisi'].append({
         'tahta': [s[:] for s in tahta], 'sira': oda['beyaz_sirasi'],
         'b_skor': oda['b_skor'], 's_skor': oda['s_skor'],
@@ -819,22 +806,18 @@ def api_move():
         else:
             oda['s_skor'] += puan; oda['y_beyaz'].append(SEMBOLLER[hedef])
 
-    # 50 Hamle Kural Sayacı
     oda['elli_sayac'] = 0 if (secilen.upper() == 'P' or tas_yendi) else oda['elli_sayac'] + 1
 
-    # Rok Kale Hareketi
     if secilen.upper() == 'K' and abs(h_sut - b_sut) == 2:
         if h_sut == 6: tahta[h_sat][5] = tahta[h_sat][7]; tahta[h_sat][7] = ' '
         elif h_sut == 2: tahta[h_sat][3] = tahta[h_sat][0]; tahta[h_sat][0] = ' '
 
-    # Terfi
     if secilen.upper() == 'P' and terfi:
         tahta[h_sat][h_sut] = terfi.upper() if oda['beyaz_sirasi'] else terfi.lower()
     else:
         tahta[h_sat][h_sut] = secilen
     tahta[b_sat][b_sut] = ' '
 
-    # Bayraklar
     if secilen == 'K': oda['b_sah'] = True
     elif secilen == 'k': oda['s_sah'] = True
     elif secilen == 'R':
@@ -846,11 +829,9 @@ def api_move():
 
     oda['beyaz_sirasi'] = not oda['beyaz_sirasi']
 
-    # 3 Kez Konum Tekrarı Takibi
     durum_anahtari = tahta_durum_anahtari(oda)
     oda['konum_gecmisi'][durum_anahtari] = oda['konum_gecmisi'].get(durum_anahtari, 0) + 1
 
-    # Tüm Beraberlik ve Mat Durumları
     s_r, s_c = sah_konumu_bul(tahta, oda['beyaz_sirasi'])
     tehdit = tehdit_altinda_mi(tahta, s_r, s_c, not oda['beyaz_sirasi']) if s_r != -1 else False
     kalan_hamle = tum_gecerli_hamleler_sayisi(oda, oda['beyaz_sirasi'])
