@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 goaltech_chess.db
+goaltech_chess.db-*
+.gizli_anahtar
