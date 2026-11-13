@@ -63,7 +63,14 @@ kilit = threading.RLock()
 def tahta_durum_anahtari(oda):
     t_str = "".join("".join(s) for s in oda['tahta'])
     r_str = f"{oda['b_sah']}{oda['b_k_sol']}{oda['b_k_sag']}{oda['s_sah']}{oda['s_k_sol']}{oda['s_k_sag']}"
-    return f"{t_str}_{oda['beyaz_sirasi']}_{r_str}_{oda['gecerken']}"
+    ep = oda['gecerken']
+    if ep:
+        # Geçerken alma imkânı yoksa bu kare konumu farklılaştırmamalı (FIDE kuralı)
+        piyon = 'P' if oda['beyaz_sirasi'] else 'p'
+        satir = ep[0] + (1 if oda['beyaz_sirasi'] else -1)
+        if not any(0 <= ep[1] + d < 8 and oda['tahta'][satir][ep[1] + d] == piyon for d in (-1, 1)):
+            ep = None
+    return f"{t_str}_{oda['beyaz_sirasi']}_{r_str}_{ep}"
 
 def yeni_oda_olustur(sure_dakika=3):
     oda = {
@@ -106,6 +113,9 @@ def yeni_oda_olustur(sure_dakika=3):
         'beyaz_baglandi': False,
         'beyaz_son': 0,
         'siyah_son': 0,
+        'beyaz_id': '',
+        'siyah_id': '',
+        'chat_sayac': 0,
         'beyaz_ad': '',
         'siyah_ad': '',
         'bot': False,
@@ -465,7 +475,7 @@ def negamax(d, beyaz, derinlik, alpha, beta, ply, bitis):
             break
     return en_iyi
 
-def bot_hamlesi_sec(d, beyaz, zorluk):
+def bot_hamlesi_sec(d, beyaz, zorluk, kalan_sure=None):
     hamleler = tum_hamleler(d, beyaz)
     if not hamleler:
         return None
@@ -479,6 +489,9 @@ def bot_hamlesi_sec(d, beyaz, zorluk):
         return random.choice(hamleler)
 
     maks_derinlik, sure_limit = (2, 1.5) if zorluk == 'orta' else (4, 2.5)
+    if kalan_sure is not None:
+        # Kalan sürenin en fazla ~1/30'unu harca; kısa oyunlarda süreden kaybetmesin
+        sure_limit = max(0.2, min(sure_limit, kalan_sure / 30))
     bitis = time.time() + sure_limit
     random.shuffle(hamleler)  # aynı oyunu hep aynı oynamasın
     en_iyi = hamleler[0]
@@ -927,7 +940,13 @@ HTML_PAGE = """<!DOCTYPE html>
             botLevel = storeGet(sessionStorage, 'goaltech_level_' + currentRoom) || 'orta';
         }
 
-        const roomQ = () => 'oda=' + encodeURIComponent(currentRoom);
+        // Her sekmenin kendine ait gizli oyuncu kimliği: linki başkası açsa da senin yerine oynayamaz
+        let myId = storeGet(sessionStorage, 'goaltech_pid');
+        if (!myId) {
+            myId = Math.random().toString(36).substring(2) + Date.now().toString(36);
+            storeSet(sessionStorage, 'goaltech_pid', myId);
+        }
+        const roomQ = () => 'oda=' + encodeURIComponent(currentRoom) + '&id=' + encodeURIComponent(myId);
 
         let playerName = storeGet(localStorage, 'goaltech_player');
         let boardState = [], selected = null, validMoves = [], whiteTurn = true, isCheck = false;
@@ -947,9 +966,15 @@ HTML_PAGE = """<!DOCTYPE html>
         let joining = false;
         let gameOverShownFor = null;
         let activeRequest = null;
-        let chatSeen = 0, chatLen = 0;
+        let chatSeenNo = 0, chatLastNo = 0;
+        let opponentAway = false;
 
         spawnBackgroundPieces();
+        if (urlParams.get('dolu')) {
+            currentRoom = null;
+            try { history.replaceState(null, '', window.location.pathname); } catch (e) {}
+            setTimeout(() => showToast('Bu oda dolu 😕 Yeni bir oyun başlatabilirsin.'), 300);
+        }
         if (playerName) document.getElementById('username').value = playerName;
 
         if (currentRoom && !isBotMode && !storeGet(sessionStorage, 'goaltech_side_' + currentRoom)) {
@@ -1015,7 +1040,14 @@ HTML_PAGE = """<!DOCTYPE html>
             if (joining) return;
             joining = true;
             try {
-                await fetch('/api/join?' + roomQ() + '&taraf=' + mySide + '&ad=' + encodeURIComponent(playerName || '') + (isBotMode ? '&zorluk=' + botLevel : ''), { method: 'POST' });
+                const res = await fetch('/api/join?' + roomQ() + '&taraf=' + mySide + '&ad=' + encodeURIComponent(playerName || '') + (isBotMode ? '&zorluk=' + botLevel : ''), { method: 'POST' });
+                const data = await res.json();
+                if (data.dolu) {
+                    // Bu tarafta başka biri oynuyor: menüye dön
+                    clearInterval(pollingTimer); pollingTimer = null;
+                    storeDel(sessionStorage, 'goaltech_side_' + currentRoom);
+                    window.location.href = window.location.pathname + '?dolu=1';
+                }
             } catch (e) {
             } finally {
                 joining = false;
@@ -1079,7 +1111,10 @@ HTML_PAGE = """<!DOCTYPE html>
 
         async function setTimeLimit(mins) {
             if (moveNo > 0 && !gameOver) { showToast('Oyun başladıktan sonra süre değiştirilemez'); return; }
-            try { await postJSON('/api/set_time?' + roomQ(), { minutes: mins }); } catch (e) {}
+            try {
+                const data = await postJSON('/api/set_time?' + roomQ() + '&taraf=' + mySide, { minutes: mins });
+                if (!data.success && data.error) showToast(data.error);
+            } catch (e) {}
             await refreshNow();
         }
 
@@ -1187,18 +1222,14 @@ HTML_PAGE = """<!DOCTYPE html>
             lastMove = data.son_hamle;
             moveNo = data.hamle_no;
             botThinking = data.bot_dusunuyor;
-            isBothConnected = data.siyah_baglandi && data.beyaz_baglandi;
+            isBothConnected = data.siyah_katildi && data.beyaz_katildi;
 
             if (prevMoveNo !== null && prevMoveNo !== moveNo) { selected = null; validMoves = []; }
 
             // Bekleme / rakip çıktı katmanı
             const oppSide = mySide === 'beyaz' ? 'siyah' : 'beyaz';
-            const oppJoined = data[oppSide + '_katildi'];
+            opponentAway = !!data[oppSide + '_katildi'] && !data[oppSide + '_baglandi'];
             document.getElementById('board-container').classList.toggle('waiting', !isBothConnected);
-            if (!isBothConnected) {
-                document.getElementById('wait-title').innerText = oppJoined ? 'Rakip Oyundan Çıktı ⚠️' : 'Bağlantı Bekleniyor... ⏳';
-                document.getElementById('wait-sub').innerText = oppJoined ? 'Geri dönmesi bekleniyor...' : 'Arkadaşının odaya girmesi bekleniyor — "Paylaş" ile linki gönder';
-            }
             document.getElementById('time-bar').classList.toggle('locked', moveNo > 0 && !gameOver);
 
             // İsimler
@@ -1258,6 +1289,7 @@ HTML_PAGE = """<!DOCTYPE html>
             if (serverMsg) { msg.innerText = serverMsg; msg.className = ''; return; }
             if (!isBothConnected) { msg.innerText = ''; msg.className = ''; return; }
             if (botThinking) { msg.innerText = 'Bot düşünüyor 🤖'; msg.className = 'bot-think dots'; return; }
+            if (opponentAway) { msg.innerText = 'Rakibin bağlantısı koptu, geri dönmesi bekleniyor ⚠️'; msg.className = ''; return; }
             const myTurn = (mySide === 'beyaz') === whiteTurn;
             if (isCheck && myTurn) { msg.innerText = 'ŞAH! Şahını korumalısın ⚠️'; msg.className = ''; return; }
             msg.innerText = myTurn ? 'Sıra sende ✨' : 'Rakip düşünüyor... 🤔';
@@ -1284,21 +1316,24 @@ HTML_PAGE = """<!DOCTYPE html>
         function updateChat(chat) {
             const panel = document.getElementById('chat-panel');
             const isOpen = panel.classList.contains('open');
-            if (chat.length !== chatLen) {
-                const box = document.getElementById('chat-messages');
-                if (chat.length < chatLen) box.innerHTML = '';
-                if (chatLen === 0 && chat.length > 0) box.innerHTML = '';
-                for (let i = Math.min(chatLen, chat.length); i < chat.length; i++) {
+            const newestNo = chat.length ? chat[chat.length - 1].no : 0;
+            const box = document.getElementById('chat-messages');
+            if (newestNo < chatLastNo) { box.innerHTML = ''; chatLastNo = 0; chatSeenNo = 0; }  // sunucu sıfırlandı
+            const fresh = chat.filter(m => m.no > chatLastNo);
+            if (fresh.length) {
+                if (chatLastNo === 0) box.innerHTML = '';
+                fresh.forEach(m => {
                     const div = document.createElement('div');
-                    div.className = 'chat-msg ' + (chat[i].taraf === mySide ? 'msg-mine' : 'msg-theirs');
-                    div.innerText = chat[i].metin;
+                    div.className = 'chat-msg ' + (m.taraf === mySide ? 'msg-mine' : 'msg-theirs');
+                    div.innerText = m.metin;
                     box.appendChild(div);
-                }
+                });
+                while (box.children.length > 100) box.removeChild(box.firstChild);
                 box.scrollTop = box.scrollHeight;
-                chatLen = chat.length;
+                chatLastNo = newestNo;
             }
-            if (isOpen) chatSeen = chatLen;
-            const unread = chat.slice(chatSeen).filter(m => m.taraf !== mySide).length;
+            if (isOpen) chatSeenNo = chatLastNo;
+            const unread = chat.filter(m => m.no > chatSeenNo && m.taraf !== mySide).length;
             const badge = document.getElementById('chat-unread');
             badge.innerText = unread;
             badge.classList.toggle('show', unread > 0);
@@ -1308,7 +1343,7 @@ HTML_PAGE = """<!DOCTYPE html>
             const panel = document.getElementById('chat-panel');
             panel.classList.toggle('open');
             if (panel.classList.contains('open')) {
-                chatSeen = chatLen;
+                chatSeenNo = chatLastNo;
                 document.getElementById('chat-unread').classList.remove('show');
                 setTimeout(() => document.getElementById('chat-input').focus(), 300);
             }
@@ -1516,6 +1551,11 @@ HTML_PAGE = """<!DOCTYPE html>
             document.getElementById('promo-modal').classList.add('open');
         }
 
+        // Telefonda başka uygulamadan dönülünce durumu hemen güncelle
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && pollingTimer) refreshNow();
+        });
+
         // Terfi penceresinin dışına tıklayınca iptal et
         document.getElementById('promo-modal').addEventListener('click', (e) => {
             if (e.target.id === 'promo-modal') {
@@ -1561,8 +1601,8 @@ BAGLANTI_ZAMAN_ASIMI = 30  # saniye boyunca haber gelmezse oyuncu "çıktı" say
 BOT_BEKLEME = 0.6          # bot hamle yapmadan önce kısa bir "düşünme" süresi
 GECMIS_ANAHTARLARI = ('tahta', 'beyaz_sirasi', 'b_skor', 's_skor', 'y_beyaz', 'y_siyah') + ROK_ANAHTARLARI + (
     'gecerken', 'elli_sayac', 'beyaz_sure', 'siyah_sure', 'konum_gecmisi', 'son_hamle', 'oyun_basladi')
-KORUNAN_ALANLAR = ('beyaz_baglandi', 'siyah_baglandi', 'beyaz_son', 'siyah_son',
-                   'beyaz_ad', 'siyah_ad', 'bot', 'zorluk', 'chat')
+KORUNAN_ALANLAR = ('beyaz_baglandi', 'siyah_baglandi', 'beyaz_son', 'siyah_son', 'beyaz_id', 'siyah_id',
+                   'beyaz_ad', 'siyah_ad', 'bot', 'zorluk', 'chat', 'chat_sayac')
 
 def odalari_temizle():
     simdi = time.time()
@@ -1604,10 +1644,20 @@ def kare_al(deger):
 
 def taraf_dogru_mu(oda, taraf):
     if taraf not in ('beyaz', 'siyah'):
-        return not oda['bot']  # bot odasında taraf zorunlu
+        return False
     if oda['bot'] and taraf != 'beyaz':
         return False
     return (taraf == 'beyaz') == oda['beyaz_sirasi']
+
+def yetkili_mi(oda, taraf):
+    """İsteği gönderen sekme bu tarafın sahibi mi? (davet linkini ele geçirmeyi engeller)"""
+    if taraf not in ('beyaz', 'siyah') or (oda['bot'] and taraf == 'siyah'):
+        return False
+    kayitli = oda[f'{taraf}_id']
+    return not kayitli or kayitli == (request.args.get('id') or '')
+
+def katildi_mi(oda, taraf):
+    return oda[f'{taraf}_baglandi']
 
 def bagli_mi(oda, taraf):
     if oda['bot'] and taraf == 'siyah':
@@ -1691,8 +1741,9 @@ def bot_oynat(oda_id):
         durum = durum_kopyala(oda)
         hamle_no = len(oda['hamle_gecmisi'])
         zorluk = oda['zorluk']
+        kalan = oda['siyah_sure']
     try:
-        hamle = bot_hamlesi_sec(durum, False, zorluk)
+        hamle = bot_hamlesi_sec(durum, False, zorluk, kalan)
     finally:
         with kilit:
             oda['bot_hesapliyor'] = False
@@ -1719,10 +1770,15 @@ def api_join():
             taraf = 'beyaz'
             if zorluk in ('kolay', 'orta', 'zor') and not oda['hamle_gecmisi']:
                 oda['zorluk'] = zorluk
-        if taraf in ('beyaz', 'siyah'):
-            oda[f'{taraf}_baglandi'] = True
-            oda[f'{taraf}_son'] = time.time()
-            if ad: oda[f'{taraf}_ad'] = ad
+        if taraf not in ('beyaz', 'siyah'):
+            return jsonify({'success': False, 'error': 'Geçersiz taraf'})
+        kimlik = (request.args.get('id') or '')[:40]
+        if oda[f'{taraf}_id'] and oda[f'{taraf}_id'] != kimlik and bagli_mi(oda, taraf):
+            return jsonify({'success': False, 'dolu': True, 'error': 'Bu oda dolu, iki oyuncu zaten oynuyor.'})
+        oda[f'{taraf}_id'] = kimlik
+        oda[f'{taraf}_baglandi'] = True
+        oda[f'{taraf}_son'] = time.time()
+        if ad: oda[f'{taraf}_ad'] = ad
         return jsonify({'success': True})
 
 @app.route('/api/leave', methods=['POST'])
@@ -1734,7 +1790,7 @@ def api_leave():
             oda = odalar[oda_id]
             if oda['bot']:
                 del odalar[oda_id]
-            elif taraf in ('beyaz', 'siyah'):
+            elif yetkili_mi(oda, taraf):
                 oda[f'{taraf}_son'] = 0
         return jsonify({'success': True})
 
@@ -1750,6 +1806,8 @@ def api_set_time():
             return jsonify({'success': False, 'error': 'Geçersiz süre'})
         if mins not in IZINLI_DAKIKALAR:
             return jsonify({'success': False, 'error': 'Geçersiz süre'})
+        if not yetkili_mi(oda, request.args.get('taraf')):
+            return jsonify({'success': False, 'error': 'Geçersiz taraf'})
         if oda['hamle_gecmisi'] and not oda['oyun_bitti']:
             return jsonify({'success': False, 'error': 'Oyun başladıktan sonra süre değiştirilemez'})
         odayi_sifirla(oda_id, mins)
@@ -1761,7 +1819,7 @@ def api_state():
     with kilit:
         oda = get_or_create_room(oda_id)
         taraf = request.args.get('taraf')
-        if taraf in ('beyaz', 'siyah') and oda[f'{taraf}_baglandi']:
+        if taraf in ('beyaz', 'siyah') and oda[f'{taraf}_baglandi'] and yetkili_mi(oda, taraf):
             oda[f'{taraf}_son'] = time.time()
     bot_oynat(oda_id)
     with kilit:
@@ -1798,7 +1856,8 @@ def api_valid():
         oda = get_or_create_room(oda_id_al())
         req = request.get_json(silent=True) or {}
         kare = kare_al([req.get('r'), req.get('c')])
-        if kare is None or oda['oyun_bitti'] or not taraf_dogru_mu(oda, req.get('taraf')):
+        if (kare is None or oda['oyun_bitti'] or not taraf_dogru_mu(oda, req.get('taraf'))
+                or not yetkili_mi(oda, req.get('taraf'))):
             return jsonify({'moves': []})
         return jsonify({'moves': gecerli_hamleleri_bul(oda, kare[0], kare[1], oda['beyaz_sirasi'])})
 
@@ -1816,8 +1875,10 @@ def api_move():
         sure_guncelle(oda)
         if oda['oyun_bitti']:
             return jsonify({'success': False, 'error': 'Oyun bitti!'})
-        if not (bagli_mi(oda, 'beyaz') and bagli_mi(oda, 'siyah')):
-            return jsonify({'success': False, 'error': 'Rakip bağlı değil!'})
+        if not (katildi_mi(oda, 'beyaz') and katildi_mi(oda, 'siyah')):
+            return jsonify({'success': False, 'error': 'Rakip henüz odaya katılmadı!'})
+        if not yetkili_mi(oda, data.get('taraf')):
+            return jsonify({'success': False, 'error': 'Bu tarafı oynama yetkin yok!'})
         if not taraf_dogru_mu(oda, data.get('taraf')):
             return jsonify({'success': False, 'error': 'Sıra sende değil!'})
         if [hed[0], hed[1]] not in gecerli_hamleleri_bul(oda, bas[0], bas[1], oda['beyaz_sirasi']):
@@ -1837,10 +1898,9 @@ def api_undo_request():
     with kilit:
         oda = get_or_create_room(oda_id_al())
         taraf = request.args.get('taraf')
-        if taraf not in ('beyaz', 'siyah'):
+        if not yetkili_mi(oda, taraf):
             return jsonify({'success': False, 'error': 'Geçersiz taraf'})
         if oda['bot']:
-            taraf = 'beyaz'
             if oda['bot_hesapliyor']:
                 return jsonify({'success': False, 'error': 'Bot düşünürken geri alınamaz'})
         adet = undo_adedi(oda, taraf)
@@ -1862,7 +1922,7 @@ def api_undo_answer():
         data = request.get_json(silent=True) or {}
         taraf, cevap = data.get('taraf'), bool(data.get('cevap'))
         isteyen = oda['undo_istegi']
-        if not isteyen:
+        if not isteyen or not yetkili_mi(oda, taraf):
             return jsonify({'success': False})
         if taraf == isteyen:
             if not cevap:
@@ -1881,7 +1941,7 @@ def api_reset_request():
         oda_id = oda_id_al()
         oda = get_or_create_room(oda_id)
         taraf = request.args.get('taraf')
-        if taraf not in ('beyaz', 'siyah'):
+        if not yetkili_mi(oda, taraf):
             return jsonify({'success': False, 'error': 'Geçersiz taraf'})
         # Bot oyununda, biten oyunda veya hiç hamle yapılmadıysa onay gerekmez
         if oda['bot'] or oda['oyun_bitti'] or not oda['hamle_gecmisi']:
@@ -1903,7 +1963,7 @@ def api_reset_answer():
         data = request.get_json(silent=True) or {}
         taraf, cevap = data.get('taraf'), bool(data.get('cevap'))
         isteyen = oda['reset_istegi']
-        if not isteyen:
+        if not isteyen or not yetkili_mi(oda, taraf):
             return jsonify({'success': False})
         if taraf == isteyen:
             if not cevap:
@@ -1921,9 +1981,10 @@ def api_chat_send():
         data = request.get_json(silent=True) or {}
         taraf = data.get('taraf')
         metin = str(data.get('metin') or '').strip()[:200]
-        if oda['bot'] or taraf not in ('beyaz', 'siyah') or not metin:
+        if oda['bot'] or not yetkili_mi(oda, taraf) or not metin:
             return jsonify({'success': False})
-        oda['chat'].append({'taraf': taraf, 'metin': metin})
+        oda['chat_sayac'] += 1
+        oda['chat'].append({'no': oda['chat_sayac'], 'taraf': taraf, 'metin': metin})
         del oda['chat'][:-100]  # son 100 mesaj tutulur
         return jsonify({'success': True})
 
