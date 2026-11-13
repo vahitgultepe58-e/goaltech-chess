@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="google-site-verification" content="lIdhFOFea-Gne9dwQpDCUbceGuTWtpOVv-SRFOeaw-o" />
+<title>Goaltech Chess</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+    --bg: #262522; --panel: #2f2e2b; --panel-2: #262522; --line: #3d3c39; --input: #1f1e1c;
+    --text: #e8e6e3; --muted: #a3a29f; --green: #81b64c; --green-dark: #45753c; --green-hover: #95c95c;
+    --red: #e06c6c; --gold: #d9c35a;
+    --sq-light: #eeeeee; --sq-dark: #565656;
+    --sq: 62px;
+}
+* { box-sizing: border-box; font-family: 'Outfit', sans-serif; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--text); overflow-x: hidden; }
+button { font: inherit; }
+.hidden { display: none !important; }
+
+/* ---------- Genel bileşenler ---------- */
+.btn { border: 1px solid var(--line); background: #3a3936; color: var(--text); border-radius: 10px; padding: 10px 14px;
+       font-weight: 700; font-size: 14px; cursor: pointer; transition: filter .15s, background .15s; display: inline-flex;
+       align-items: center; justify-content: center; gap: 6px; }
+.btn:hover { filter: brightness(1.15); }
+.btn:disabled { opacity: .45; cursor: not-allowed; filter: none; }
+.btn.green { background: var(--green); border-color: var(--green); color: #fff; }
+.btn.red { color: #f19999; }
+.btn-big { width: 100%; padding: 16px 12px; border: none; border-radius: 14px; color: #fff; font-weight: 800; font-size: 20px;
+           cursor: pointer; background: var(--green); box-shadow: 0 6px 0 var(--green-dark), 0 10px 20px rgba(0,0,0,.35);
+           text-shadow: 0 2px 0 rgba(0,0,0,.25); transition: transform .08s, box-shadow .08s, background .2s; }
+.btn-big:hover { background: var(--green-hover); }
+.btn-big:active { transform: translateY(5px); box-shadow: 0 1px 0 var(--green-dark), 0 4px 10px rgba(0,0,0,.35); }
+.btn-big.gray { background: #4a4946; box-shadow: 0 6px 0 #2e2d2a, 0 10px 20px rgba(0,0,0,.35); }
+.btn-big.gray:hover { background: #575653; }
+input[type=text], input[type=password] { width: 100%; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line);
+       background: var(--input); color: #fff; font-size: 15px; outline: none; }
+input:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(129,182,76,.25); }
+label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 0 0 6px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button { flex: 1 0 auto; min-width: 56px; padding: 8px 6px; border-radius: 9px; border: 1px solid var(--line); background: var(--input);
+              color: #d6d5d2; font-weight: 700; font-size: 13px; cursor: pointer; }
+.seg button:hover { background: #343330; }
+.seg button.active { background: var(--green-dark); border-color: var(--green); color: #fff; }
+#toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); background: var(--green); color: #fff; padding: 10px 20px;
+         border-radius: 30px; font-weight: 700; font-size: 14px; opacity: 0; pointer-events: none; transition: .3s; z-index: 500; max-width: 90vw; text-align: center; }
+#toast.show { opacity: 1; transform: translate(-50%, -8px); }
+#toast.err { background: #b04a4a; }
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 300; align-items: center; justify-content: center; padding: 16px; }
+.modal.open { display: flex; }
+.modal-box { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px; width: 100%; max-width: 420px;
+             max-height: calc(100vh - 32px); overflow: auto; box-shadow: 0 24px 60px rgba(0,0,0,.5); animation: pop .2s ease both; }
+.modal-box.wide { max-width: 720px; }
+@keyframes pop { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.modal-head h3 { margin: 0; font-size: 18px; }
+.x { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; }
+.center { text-align: center; }
+.row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.muted { color: var(--muted); }
+.big-icon { font-size: 52px; }
+
+/* ---------- Üst çubuk ---------- */
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; max-width: 1180px; margin: 0 auto; }
+.logo { font-family: 'Anton', 'Impact', 'Arial Narrow', sans-serif; font-size: 26px; letter-spacing: 1px; color: var(--green); cursor: pointer; white-space: nowrap; }
+.logo span { color: var(--text); }
+.account { display: flex; gap: 8px; align-items: center; }
+.user-chip { display: inline-flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 30px;
+             padding: 6px 12px; font-weight: 700; cursor: pointer; }
+.user-chip .elo { color: var(--green); }
+.menu-pop { position: absolute; right: 16px; top: 58px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 6px;
+            z-index: 200; min-width: 180px; box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+.menu-pop button { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--text); padding: 10px 12px; border-radius: 8px; cursor: pointer; font-weight: 600; }
+.menu-pop button:hover { background: #3a3936; }
+
+/* ---------- Ana menü ---------- */
+#menu { max-width: 1180px; margin: 0 auto; padding: 0 16px 32px; display: flex; flex-direction: column; gap: 18px; }
+.hero-banner { display: grid; grid-template-columns: 1fr 1.1fr; background: var(--panel); border-radius: 28px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+.hero-left { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 36px 24px 0; }
+.hero-title { margin: 0; font-family: 'Anton', 'Impact', 'Arial Narrow', sans-serif; font-weight: 400; font-size: clamp(48px, 6.6vw, 100px);
+              line-height: 1.02; letter-spacing: 1px; text-align: center; color: var(--green); text-shadow: 0 6px 0 #4b7a2b, 0 14px 24px rgba(0,0,0,.45); }
+.hero-title span { display: block; }
+.hero-art { position: relative; width: 100%; height: clamp(150px, 18vw, 240px); }
+.hero-floor { position: absolute; left: -10%; right: -10%; bottom: -40px; height: 70%; background-color: #2a2927;
+              background-image: conic-gradient(#383734 25%, transparent 0 50%, #383734 0 75%, transparent 0); background-size: 25% 25%;
+              transform: perspective(380px) rotateX(58deg); transform-origin: bottom;
+              -webkit-mask-image: linear-gradient(to top, #000 30%, transparent); mask-image: linear-gradient(to top, #000 30%, transparent); }
+.art { position: absolute; bottom: 0; line-height: .85; font-family: 'Segoe UI Symbol', 'DejaVu Sans', serif; user-select: none; }
+.art-knight { left: 12%; font-size: clamp(90px, 11vw, 170px); color: #5b5a57; transform: scaleX(-1); }
+.art-rook { right: 12%; font-size: clamp(80px, 10vw, 150px); color: #6a6966; }
+.art-pawn { left: 50%; transform: translateX(-50%); font-size: clamp(120px, 15vw, 230px); color: var(--green); z-index: 2; filter: drop-shadow(0 16px 18px rgba(0,0,0,.55)); }
+.hero-right { display: flex; align-items: center; justify-content: center; padding: 24px; background: #2a2927; }
+.hero-board-frame { padding: 8px; border-radius: 14px; background: #3a3936; box-shadow: 0 20px 50px rgba(0,0,0,.5); }
+.hero-board { --hb: min(400px, 32vw); width: var(--hb); height: var(--hb); display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr); border-radius: 6px; overflow: hidden; }
+.hb-sq { display: flex; align-items: center; justify-content: center; font-size: calc(var(--hb) / 8 * .74); line-height: 1; font-family: 'Segoe UI Symbol', 'DejaVu Sans', serif; }
+.hb-sq.light { background: var(--sq-light); } .hb-sq.dark { background: var(--sq-dark); }
+.glyph-w { color: #fff; text-shadow: 0 0 2px #222, 0 0 2px #222, 0 3px 4px rgba(0,0,0,.4); }
+.glyph-b { color: #1e1b2e; text-shadow: 0 0 2px rgba(255,255,255,.6), 0 3px 4px rgba(0,0,0,.35); }
+
+.panel { background: var(--panel); border-radius: 22px; padding: 20px; box-shadow: 0 16px 40px rgba(0,0,0,.3); }
+.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.mode-card { background: var(--panel-2); border: 1px solid var(--line); border-radius: 18px; padding: 18px 16px; display: flex; flex-direction: column;
+             justify-content: space-between; gap: 12px; text-align: center; transition: border-color .2s; }
+.mode-card:hover { border-color: var(--green); }
+.mode-card h3 { margin: 4px 0 0; font-size: 18px; }
+.mode-card p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
+.mode-icon { font-size: 38px; }
+.name-row { margin-bottom: 16px; }
+.lists { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.list-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 14px; min-height: 120px; }
+.list-box h4 { margin: 0 0 10px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.list-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #2f2e2b; margin-bottom: 6px; font-size: 14px; }
+.list-item .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-item .tc { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.empty { color: var(--muted); font-size: 13px; text-align: center; padding: 18px 0; }
+
+/* ---------- Oyun ekranı ---------- */
+#game { max-width: 1180px; margin: 0 auto; padding: 0 16px 24px; }
+.game-layout { display: grid; grid-template-columns: auto minmax(280px, 380px); gap: 20px; justify-content: center; align-items: start; }
+.board-col { display: flex; flex-direction: column; gap: 8px; }
+.player-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--panel); border: 1px solid var(--line);
+              border-radius: 12px; padding: 8px 12px; }
+.player-bar.turn { border-color: var(--green); }
+.pinfo { display: flex; flex-direction: column; min-width: 0; }
+.pname { font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pname .pelo { color: var(--muted); font-weight: 600; margin-left: 4px; }
+.pname .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: #6b6a67; vertical-align: middle; }
+.pname .dot.on { background: var(--green); }
+.pcaps { font-size: 15px; color: var(--muted); min-height: 18px; white-space: nowrap; overflow: hidden; }
+.pcaps b { color: var(--text); font-weight: 700; margin-left: 4px; font-size: 13px; }
+.clock { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 700; background: #1f1e1c; border-radius: 8px; padding: 4px 12px; min-width: 112px; text-align: center; }
+.clock.run { background: var(--text); color: #1f1e1c; }
+.clock.low { color: #fff; background: #b04a4a; }
+
+.board-wrapper { position: relative; padding: 6px; background: #3a3936; border-radius: 12px; box-shadow: 0 16px 40px rgba(0,0,0,.45); }
+.board { display: grid; grid-template-columns: repeat(8, var(--sq)); grid-template-rows: repeat(8, var(--sq)); border-radius: 6px; overflow: hidden; touch-action: none; }
+.square { display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; user-select: none; -webkit-tap-highlight-color: transparent; }
+.square.light { background: var(--sq-light); } .square.dark { background: var(--sq-dark); }
+.square .piece { width: 80%; height: 80%; pointer-events: none; position: relative; z-index: 5; filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); }
+.square .glyph { font-size: calc(var(--sq) * .74); line-height: 1; width: auto; height: auto; font-family: 'Segoe UI Symbol', 'DejaVu Sans', serif; }
+.square.last::before { content: ''; position: absolute; inset: 0; background: rgba(214,190,70,.45); }
+.square.sel { background: #d9c35a !important; }
+.square.check { background: radial-gradient(circle, #e04848 0%, #a52a2a 75%) !important; }
+.coord { position: absolute; font-size: calc(var(--sq) * .17); font-weight: 700; pointer-events: none; z-index: 6; }
+.coord.rank { top: 2px; left: 4px; } .coord.file { bottom: 1px; right: 4px; }
+.square.light .coord { color: var(--sq-dark); } .square.dark .coord { color: var(--sq-light); }
+.hint-dot { position: absolute; width: 30%; height: 30%; border-radius: 50%; background: rgba(129,182,76,.85); z-index: 10; pointer-events: none; }
+.hint-ring { position: absolute; inset: 5%; border-radius: 50%; border: 5px solid rgba(129,182,76,.85); z-index: 10; pointer-events: none; }
+.board.shake { animation: shake .35s ease; }
+@keyframes shake { 20% { transform: translateX(-5px); } 40% { transform: translateX(5px); } 60% { transform: translateX(-3px); } 80% { transform: translateX(3px); } }
+.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 50; background: rgba(20,20,18,.55); border-radius: 12px; text-align: center; padding: 12px; }
+.overlay .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; max-width: 320px; }
+.overlay .card b { display: block; font-size: 17px; margin-bottom: 6px; }
+
+.side-col { display: flex; flex-direction: column; gap: 12px; }
+.side-box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+.side-box h4 { margin: 0 0 8px; font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; display: flex; justify-content: space-between; align-items: center; }
+.moves { max-height: 300px; min-height: 120px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 14px; }
+.moves table { width: 100%; border-collapse: collapse; }
+.moves td { padding: 4px 6px; }
+.moves td.n { color: var(--muted); width: 38px; }
+.moves td.m { cursor: default; border-radius: 6px; }
+.moves td.m.cur { background: var(--green-dark); color: #fff; }
+.moves tr:nth-child(odd) { background: rgba(255,255,255,.03); }
+#msg { min-height: 22px; font-weight: 700; text-align: center; font-size: 15px; }
+#msg.ok { color: var(--green); } #msg.warn { color: #f0b36b; } #msg.err { color: #f19999; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.icon-btns { display: flex; gap: 6px; }
+.icon-btns .btn { padding: 6px 10px; font-size: 13px; }
+.dots::after { content: ''; animation: dots 1.2s steps(4) infinite; }
+@keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+/* Sohbet */
+.chat-msgs { height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.chat-msg { max-width: 85%; padding: 6px 10px; border-radius: 12px; font-size: 14px; word-wrap: break-word; }
+.chat-msg.mine { align-self: flex-end; background: var(--green-dark); }
+.chat-msg.theirs { align-self: flex-start; background: #3a3936; }
+.chat-msg .who { display: block; font-size: 11px; color: var(--muted); }
+.chat-row { display: flex; gap: 6px; }
+.chat-row input { padding: 9px 10px; font-size: 14px; }
+
+/* Terfi */
+.promo-pieces { display: flex; gap: 10px; justify-content: center; margin-top: 12px; }
+.promo-piece { width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; background: var(--input); border: 1px solid var(--line);
+               border-radius: 12px; cursor: pointer; font-size: 44px; font-family: 'Segoe UI Symbol', 'DejaVu Sans', serif; }
+.promo-piece:hover { border-color: var(--green); }
+.promo-piece img { width: 52px; height: 52px; }
+
+/* Tablolar (liderlik, profil) */
+.tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tbl th { text-align: left; color: var(--muted); font-size: 12px; text-transform: uppercase; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.tbl td { padding: 8px; border-bottom: 1px solid #353431; }
+.tbl tr.click { cursor: pointer; } .tbl tr.click:hover { background: #353431; }
+.win { color: var(--green); font-weight: 700; } .loss { color: #f19999; font-weight: 700; } .draw { color: var(--muted); font-weight: 700; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+.stat { background: var(--panel-2); border-radius: 12px; padding: 10px; text-align: center; }
+.stat b { display: block; font-size: 22px; }
+.stat span { font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+.tabs button { flex: 1; }
+
+/* Maç tekrarı */
+.replay { display: grid; grid-template-columns: auto 1fr; gap: 16px; }
+.replay .board { --sq: 44px; }
+.replay .moves { max-height: 300px; }
+.replay .moves td.m { cursor: pointer; }
+.replay .moves td.m:hover { background: #3a3936; }
+
+@media (max-width: 900px) {
+    .game-layout { grid-template-columns: 1fr; }
+    .modes { grid-template-columns: 1fr; }
+    .lists { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+    :root { --sq: calc((100vw - 44px) / 8); }
+    #game { padding: 0 10px 20px; }
+    .clock { font-size: 22px; min-width: 96px; }
+    .hero-banner { grid-template-columns: 1fr; }
+    .hero-right { display: none; }
+    .hero-art { height: 130px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .replay { grid-template-columns: 1fr; }
+    .replay .board { --sq: calc((100vw - 90px) / 8); }
+    .logo { font-size: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<div class="topbar">
+    <div class="logo" onclick="menuyeDon()">GOALTECH <span>CHESS</span></div>
+    <div class="account" id="account"></div>
+</div>
+<div class="menu-pop hidden" id="user-menu">
+    <button onclick="profilAc()">👤 Profilim</button>
+    <button onclick="liderlikAc()">🏆 Liderlik Tablosu</button>
+    <button onclick="cikisYap()">🚪 Çıkış Yap</button>
+</div>
+
+<!-- ================= ANA MENÜ ================= -->
+<div id="menu">
+    <div class="hero-banner">
+        <div class="hero-left">
+            <h1 class="hero-title"><span>GOALTECH</span><span>CHESS</span></h1>
+            <div class="hero-art" aria-hidden="true">
+                <div class="hero-floor"></div>
+                <span class="art art-knight">&#x265E;&#xFE0E;</span>
+                <span class="art art-rook">&#x265C;&#xFE0E;</span>
+                <span class="art art-pawn">&#x265F;&#xFE0E;</span>
+            </div>
+        </div>
+        <div class="hero-right"><div class="hero-board-frame"><div class="hero-board" id="hero-board"></div></div></div>
+    </div>
+
+    <div class="panel" id="join-panel" style="display:none">
+        <div class="center" style="margin-bottom:14px"><div class="big-icon">♟</div><h3 style="margin:6px 0 2px">Davete Katıl</h3><div class="muted">Arkadaşın seni bekliyor</div></div>
+        <div class="name-row guest-only"><label class="lbl" for="join-name">Oyuncu Adı</label><input type="text" id="join-name" maxlength="20"></div>
+        <button class="btn-big" onclick="davetKatil()">OYUNA KATIL</button>
+        <div class="center" style="margin-top:12px"><button class="btn" onclick="menuyeDon()">Ana menüye dön</button></div>
+    </div>
+
+    <div class="panel" id="modes-panel">
+        <div class="name-row guest-only">
+            <label class="lbl" for="username">Oyuncu Adı (misafir)</label>
+            <input type="text" id="username" maxlength="20" placeholder="Adını yaz">
+            <div class="muted" style="font-size:12px;margin-top:6px">Puanlı oynamak ve Elo kazanmak için <a href="#" onclick="authAc('kayit');return false" style="color:var(--green)">hesap oluştur</a>.</div>
+        </div>
+        <div class="modes">
+            <div class="mode-card">
+                <div><div class="mode-icon">⚡</div><h3>Rakip Bul</h3><p>Çevrimiçi biriyle eşleş</p></div>
+                <div class="seg" id="lobby-time"></div>
+                <button class="btn-big" onclick="rakipAra()">OYNA</button>
+            </div>
+            <div class="mode-card">
+                <div><div class="mode-icon">🤖</div><h3>Bilgisayara Karşı</h3><p>Yapay zekaya meydan oku</p></div>
+                <div class="seg" id="bot-level">
+                    <button data-v="kolay">Kolay</button><button data-v="orta" class="active">Orta</button><button data-v="zor">Zor</button>
+                </div>
+                <button class="btn-big" onclick="odaKur('bot')">BOTLA OYNA</button>
+            </div>
+            <div class="mode-card">
+                <div><div class="mode-icon">👥</div><h3>Arkadaşınla Oyna</h3><p>Davet linki gönder</p></div>
+                <div class="muted" style="font-size:13px">Puansız oyun · geri alma açık</div>
+                <button class="btn-big gray" onclick="odaKur('arkadas')">ODA KUR</button>
+            </div>
+        </div>
+        <div class="lists">
+            <div class="list-box"><h4>⏳ Bekleyen Oyuncular</h4><div id="waiting-list"><div class="empty">Şu an bekleyen yok</div></div></div>
+            <div class="list-box"><h4>👁 Canlı Oyunlar</h4><div id="live-list"><div class="empty">Şu an oynanan oyun yok</div></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= OYUN ================= -->
+<div id="game" class="hidden">
+    <div class="game-layout">
+        <div class="board-col">
+            <div class="player-bar" id="bar-top"></div>
+            <div class="board-wrapper">
+                <div class="board" id="board"></div>
+                <div class="overlay hidden" id="board-overlay"><div class="card"><b id="ov-title"></b><span class="muted" id="ov-sub"></span><div id="ov-btn" style="margin-top:10px"></div></div></div>
+            </div>
+            <div class="player-bar" id="bar-bottom"></div>
+        </div>
+        <div class="side-col">
+            <div class="side-box" id="time-box">
+                <h4>⏱ Süre <span class="muted" style="text-transform:none;font-size:12px">ilk hamleden önce</span></h4>
+                <div class="seg" id="game-time"></div>
+            </div>
+            <div class="side-box">
+                <h4><span id="mode-label">Hamleler</span>
+                    <span class="icon-btns"><button class="btn" title="Tahtayı çevir" onclick="tahtayiCevir()">⇅</button><button class="btn" id="sound-btn" title="Ses" onclick="sesDegistir()">🔊</button></span></h4>
+                <div class="moves" id="moves"></div>
+            </div>
+            <div id="msg"></div>
+            <div class="actions" id="actions">
+                <button class="btn" id="btn-undo" onclick="istekGonder('geri')">↩ Geri Al</button>
+                <button class="btn" id="btn-draw" onclick="beraberlikTeklif()">½ Beraberlik</button>
+                <button class="btn red" id="btn-resign" onclick="teslimOl()">🏳 Teslim Ol</button>
+                <button class="btn" id="btn-new" onclick="yeniOyun()">🔄 Yeni Oyun</button>
+                <button class="btn green" id="btn-share" onclick="paylas()">🔗 Davet Linki</button>
+                <button class="btn" onclick="odadanCik()">🚪 Ana Menü</button>
+            </div>
+            <div class="side-box" id="chat-box">
+                <h4>💬 Sohbet</h4>
+                <div class="chat-msgs" id="chat-msgs"></div>
+                <div class="chat-row" id="chat-row"><input type="text" id="chat-input" maxlength="200" placeholder="Mesaj yaz..." onkeydown="if(event.key==='Enter') sohbetGonder()"><button class="btn green" onclick="sohbetGonder()">Gönder</button></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ================= PENCERELER ================= -->
+<div class="modal" id="m-search"><div class="modal-box center">
+    <div class="big-icon dots-wrap">⏳</div><h3 style="margin:8px 0 4px">Rakip aranıyor<span class="dots"></span></h3>
+    <div class="muted" id="search-info"></div><div class="muted" id="search-time" style="margin:6px 0 16px"></div>
+    <button class="btn" onclick="aramaIptal()">İptal</button>
+</div></div>
+
+<div class="modal" id="m-promo"><div class="modal-box center"><h3 style="margin:0">Terfi Edecek Taşı Seç</h3><div class="promo-pieces" id="promo-options"></div></div></div>
+
+<div class="modal" id="m-request"><div class="modal-box center">
+    <div class="big-icon" id="req-icon">⏳</div><div style="font-weight:700;margin:8px 0 16px" id="req-text"></div>
+    <div class="row" id="req-answer"><button class="btn green" onclick="istekCevapla(true)">Kabul Et</button><button class="btn red" onclick="istekCevapla(false)">Reddet</button></div>
+    <div class="row" id="req-cancel"><button class="btn" onclick="istekCevapla(false)">İsteği Geri Çek</button></div>
+</div></div>
+
+<div class="modal" id="m-confirm"><div class="modal-box center">
+    <div style="font-weight:700;font-size:16px;margin:4px 0 18px" id="confirm-text"></div>
+    <div class="row"><button class="btn green" id="confirm-yes">Evet</button><button class="btn" id="confirm-no">Vazgeç</button></div>
+</div></div>
+
+<div class="modal" id="m-over"><div class="modal-box center">
+    <div class="big-icon" id="over-icon">🏆</div>
+    <h3 style="margin:8px 0 6px" id="over-title"></h3>
+    <div class="muted" id="over-elo" style="margin-bottom:16px"></div>
+    <div class="row" id="over-btns"></div>
+</div></div>
+
+<div class="modal" id="m-auth"><div class="modal-box">
+    <div class="modal-head"><h3>Hesap</h3><button class="x" onclick="kapat('m-auth')">×</button></div>
+    <div class="tabs seg"><button id="tab-giris" onclick="authSekme('giris')">Giriş Yap</button><button id="tab-kayit" onclick="authSekme('kayit')">Kayıt Ol</button></div>
+    <label class="lbl" for="auth-ad">Kullanıcı Adı</label><input type="text" id="auth-ad" maxlength="20" autocomplete="username">
+    <div style="height:10px"></div>
+    <label class="lbl" for="auth-sifre">Şifre</label><input type="password" id="auth-sifre" autocomplete="current-password" onkeydown="if(event.key==='Enter') authGonder()">
+    <div id="auth-err" style="color:#f19999;font-size:13px;min-height:18px;margin:8px 0"></div>
+    <button class="btn-big" id="auth-submit" onclick="authGonder()">GİRİŞ YAP</button>
+</div></div>
+
+<div class="modal" id="m-leader"><div class="modal-box wide">
+    <div class="modal-head"><h3>🏆 Liderlik Tablosu</h3><button class="x" onclick="kapat('m-leader')">×</button></div>
+    <div id="leader-body"></div>
+</div></div>
+
+<div class="modal" id="m-profile"><div class="modal-box wide">
+    <div class="modal-head"><h3 id="profile-title">Profil</h3><button class="x" onclick="kapat('m-profile')">×</button></div>
+    <div id="profile-body"></div>
+</div></div>
+
+<div class="modal" id="m-replay"><div class="modal-box wide">
+    <div class="modal-head"><h3 id="replay-title">Maç Tekrarı</h3><button class="x" onclick="kapat('m-replay')">×</button></div>
+    <div class="replay">
+        <div><div class="board-wrapper"><div class="board" id="replay-board"></div></div>
+            <div class="row" style="margin-top:10px"><button class="btn" onclick="tekrarGit(0)">⏮</button><button class="btn" onclick="tekrarGit(rp.i-1)">◀</button><button class="btn" onclick="tekrarGit(rp.i+1)">▶</button><button class="btn" onclick="tekrarGit(rp.tahtalar.length-1)">⏭</button></div></div>
+        <div><div class="muted" id="replay-info" style="margin-bottom:8px"></div><div class="moves" id="replay-moves"></div></div>
+    </div>
+</div></div>
+
+<script>
+// =====================================================================
+// Yardımcılar
+// =====================================================================
+const IMAGES = {
+    K: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg', Q: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
+    R: 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg', B: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
+    N: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg', P: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
+    k: 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg', q: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
+    r: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg', b: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
+    n: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg', p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg'
+};
+const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+const SURELER = ['1+0', '3+0', '3+2', '5+0', '5+3', '10+0', '10+5', '15+10'];
+const SEVIYE = { kolay: 'Kolay', orta: 'Orta', zor: 'Zor' };
+const $ = id => document.getElementById(id);
+
+function depoAl(s, k) { try { return s.getItem(k); } catch (e) { return null; } }
+function depoYaz(s, k, v) { try { s.setItem(k, v); } catch (e) {} }
+
+let myId = depoAl(sessionStorage, 'goaltech_pid');
+if (!myId) { myId = Math.random().toString(36).slice(2) + Date.now().toString(36); depoYaz(sessionStorage, 'goaltech_pid', myId); }
+
+const ODA_UCLARI = ['/api/katil', '/api/durum', '/api/gecerli', '/api/hamle', '/api/teslim', '/api/istek', '/api/cevap', '/api/sure', '/api/sohbet', '/api/ayril'];
+async function api(yol, govde, yontem) {
+    const ayir = yol.includes('?') ? '&' : '?';
+    const odaEk = oda && ODA_UCLARI.some(u => yol.startsWith(u)) ? '&oda=' + encodeURIComponent(oda) : '';
+    const url = yol + ayir + 'id=' + encodeURIComponent(myId) + odaEk;
+    const secenek = { method: yontem || (govde !== undefined ? 'POST' : 'GET'), credentials: 'same-origin' };
+    if (govde !== undefined) { secenek.headers = { 'Content-Type': 'application/json' }; secenek.body = JSON.stringify(govde); }
+    const res = await fetch(url, secenek);
+    return res.json();
+}
+
+function bildir(metin, hata) {
+    const t = $('toast'); t.innerText = metin; t.classList.toggle('err', !!hata); t.classList.add('show');
+    clearTimeout(bildir.z); bildir.z = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function ac(id) { $(id).classList.add('open'); }
+function kapat(id) { $(id).classList.remove('open'); }
+function onayla(metin, evet = 'Evet') {
+    return new Promise(coz => {
+        $('confirm-text').innerText = metin; $('confirm-yes').innerText = evet; ac('m-confirm');
+        $('confirm-yes').onclick = () => { kapat('m-confirm'); coz(true); };
+        $('confirm-no').onclick = () => { kapat('m-confirm'); coz(false); };
+    });
+}
+function esc(s) { const d = document.createElement('div'); d.innerText = s == null ? '' : s; return d.innerHTML; }
+function sureMetni(s) {
+    s = Math.max(0, s);
+    if (s < 10) return '0:0' + s.toFixed(1);
+    const m = Math.floor(s / 60), sn = Math.floor(s % 60);
+    return m + ':' + (sn < 10 ? '0' : '') + sn;
+}
+function segKur(el, degerler, secili, fn) {
+    el.innerHTML = '';
+    degerler.forEach(v => {
+        const b = document.createElement('button'); b.innerText = v; b.dataset.v = v;
+        if (v === secili) b.classList.add('active');
+        b.onclick = () => { [...el.children].forEach(x => x.classList.toggle('active', x === b)); fn && fn(v); };
+        el.appendChild(b);
+    });
+}
+function segDeger(el) { const a = el.querySelector('.active'); return a ? a.dataset.v : null; }
+[...$('bot-level').children].forEach(b => b.onclick = () => [...$('bot-level').children].forEach(x => x.classList.toggle('active', x === b)));
+
+// =====================================================================
+// Ses (dosya gerektirmeyen kısa tonlar)
+// =====================================================================
+let sesAcik = depoAl(localStorage, 'goaltech_ses') !== '0';
+let actx = null;
+function ton(frek, sure, gecikme = 0, ses = 0.08) {
+    if (!sesAcik) return;
+    try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime + gecikme;
+        o.type = 'triangle'; o.frequency.value = frek; g.gain.setValueAtTime(ses, t); g.gain.exponentialRampToValueAtTime(0.0001, t + sure);
+        o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t + sure);
+    } catch (e) {}
+}
+const SES = {
+    hamle: () => ton(520, .07), alma: () => { ton(300, .09); ton(220, .1, .05); },
+    sah: () => { ton(880, .1); ton(660, .12, .08); }, bitis: () => { ton(523, .15); ton(659, .15, .12); ton(784, .25, .24); }
+};
+function sesDegistir() { sesAcik = !sesAcik; depoYaz(localStorage, 'goaltech_ses', sesAcik ? '1' : '0'); $('sound-btn').innerText = sesAcik ? '🔊' : '🔇'; }
+$('sound-btn').innerText = sesAcik ? '🔊' : '🔇';
+
+// =====================================================================
+// Hesap
+// =====================================================================
+let ben = null;
+async function hesapYukle() {
+    try { const r = await api('/api/ben'); ben = r.kullanici; } catch (e) { ben = null; }
+    hesapCiz();
+}
+function hesapCiz() {
+    const el = $('account');
+    if (ben) {
+        el.innerHTML = `<span class="user-chip" onclick="event.stopPropagation(); $('user-menu').classList.toggle('hidden')">👤 ${esc(ben.ad)} <span class="elo">${ben.elo}</span> ▾</span>`;
+    } else {
+        el.innerHTML = `<button class="btn" onclick="liderlikAc()">🏆</button><button class="btn" onclick="authAc('giris')">Giriş</button><button class="btn green" onclick="authAc('kayit')">Kayıt Ol</button>`;
+    }
+    document.querySelectorAll('.guest-only').forEach(e => e.style.display = ben ? 'none' : '');
+}
+document.addEventListener('click', () => $('user-menu').classList.add('hidden'));
+let authMod = 'giris';
+function authAc(mod) { authSekme(mod); $('auth-err').innerText = ''; ac('m-auth'); setTimeout(() => $('auth-ad').focus(), 50); }
+function authSekme(mod) {
+    authMod = mod;
+    $('tab-giris').classList.toggle('active', mod === 'giris'); $('tab-kayit').classList.toggle('active', mod === 'kayit');
+    $('auth-submit').innerText = mod === 'giris' ? 'GİRİŞ YAP' : 'KAYIT OL';
+    $('auth-sifre').autocomplete = mod === 'giris' ? 'current-password' : 'new-password';
+}
+async function authGonder() {
+    const r = await api('/api/' + authMod, { ad: $('auth-ad').value.trim(), sifre: $('auth-sifre').value });
+    if (!r.success) { $('auth-err').innerText = r.error; return; }
+    ben = r.kullanici; $('auth-sifre').value = ''; kapat('m-auth'); hesapCiz();
+    bildir(authMod === 'giris' ? 'Hoş geldin, ' + ben.ad + '!' : 'Hesabın oluşturuldu 🎉');
+}
+async function cikisYap() { await api('/api/cikis', {}); ben = null; hesapCiz(); bildir('Çıkış yapıldı'); }
+function oyuncuAdi() {
+    if (ben) return ben.ad;
+    const ad = ($('username').value || $('join-name').value || '').trim().slice(0, 20) || 'Misafir';
+    depoYaz(localStorage, 'goaltech_player', ad);
+    return ad;
+}
+
+// =====================================================================
+// Ana menü, lobi
+// =====================================================================
+let oda = null, aramaZamanlayici = null, lobiZamanlayici = null, aramaBaslangic = 0, aramaSure = null;
+const kayitliAd = depoAl(localStorage, 'goaltech_player') || '';
+$('username').value = kayitliAd; $('join-name').value = kayitliAd;
+segKur($('lobby-time'), SURELER, depoAl(localStorage, 'goaltech_sure') || '3+0', v => depoYaz(localStorage, 'goaltech_sure', v));
+
+function heroTahta() {
+    const el = $('hero-board'), satirlar = ['rnbqkbnr', 'pppppppp', '', '', '', '', 'PPPPPPPP', 'RNBQKBNR'];
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+        const sq = document.createElement('div'); sq.className = 'hb-sq ' + ((r + c) % 2 ? 'dark' : 'light');
+        const p = satirlar[r][c];
+        if (p) { const s = document.createElement('span'); s.className = p === p.toUpperCase() ? 'glyph-w' : 'glyph-b'; s.textContent = GLYPHS[p.toLowerCase()] + '︎'; sq.appendChild(s); }
+        el.appendChild(sq);
+    }
+}
+heroTahta();
+
+function menuGoster() {
+    $('menu').classList.remove('hidden'); $('game').classList.add('hidden');
+    $('join-panel').style.display = 'none'; $('modes-panel').style.display = '';
+    lobiYenile(); clearInterval(lobiZamanlayici); lobiZamanlayici = setInterval(lobiYenile, 3000);
+}
+function menuyeDon() {
+    if (oda) { odadanCik(); return; }
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    menuGoster();
+}
+
+async function lobiYenile() {
+    if (oda) return;
+    let r;
+    try { r = await api('/api/lobi'); } catch (e) { return; }
+    if (oda) return;
+    if (r.eslesme) { eslesmeBulundu(r.eslesme); return; }
+    const w = $('waiting-list');
+    const digerleri = r.bekleyenler.filter(b => !b.ben);
+    w.innerHTML = digerleri.length ? '' : '<div class="empty">Şu an bekleyen yok</div>';
+    digerleri.forEach(b => {
+        const d = document.createElement('div'); d.className = 'list-item';
+        d.innerHTML = `<span class="who">${esc(b.ad)} ${b.elo ? '<span class="muted">(' + b.elo + ')</span>' : ''}</span><span class="tc">${esc(b.sure_ayari)}</span>`;
+        const btn = document.createElement('button'); btn.className = 'btn green'; btn.innerText = 'Oyna'; btn.onclick = () => meydanOku(b.no);
+        d.appendChild(btn); w.appendChild(d);
+    });
+    const l = $('live-list');
+    l.innerHTML = r.canli.length ? '' : '<div class="empty">Şu an oynanan oyun yok</div>';
+    r.canli.forEach(g => {
+        const d = document.createElement('div'); d.className = 'list-item';
+        d.innerHTML = `<span class="who">${esc(g.beyaz_ad || '?')} – ${esc(g.siyah_ad || '?')}</span><span class="tc">${esc(g.sure_ayari)} · ${g.hamle_sayisi} hamle</span>`;
+        const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = 'İzle'; btn.onclick = () => odayaGir(g.id);
+        d.appendChild(btn); l.appendChild(d);
+    });
+}
+
+async function rakipAra() {
+    aramaSure = segDeger($('lobby-time'));
+    const r = await api('/api/lobi/ara', { sure: aramaSure, ad: oyuncuAdi() });
+    if (!r.success) { bildir(r.error, true); return; }
+    if (r.eslesme) { eslesmeBulundu(r.eslesme); return; }
+    aramaBaslangic = Date.now();
+    $('search-info').innerText = aramaSure + (ben ? ' · puanlı' : ' · misafir (puansız)');
+    ac('m-search');
+    clearInterval(aramaZamanlayici);
+    aramaZamanlayici = setInterval(async () => {
+        $('search-time').innerText = Math.floor((Date.now() - aramaBaslangic) / 1000) + ' sn';
+        const s = await api('/api/lobi');
+        if (s.eslesme) eslesmeBulundu(s.eslesme);
+        else if (!s['araniyor']) { // kayıt düştüyse (ör. sekme uyudu) yeniden gir
+            const t = await api('/api/lobi/ara', { sure: aramaSure, ad: oyuncuAdi() });
+            if (t.eslesme) eslesmeBulundu(t.eslesme);
+        }
+    }, 1000);
+}
+async function aramaIptal() { clearInterval(aramaZamanlayici); kapat('m-search'); await api('/api/lobi/iptal', {}); }
+async function meydanOku(no) {
+    const r = await api('/api/lobi/kabul', { no, ad: oyuncuAdi() });
+    if (!r.success) { bildir(r.error, true); lobiYenile(); return; }
+    eslesmeBulundu(r.eslesme);
+}
+function eslesmeBulundu(e) {
+    clearInterval(aramaZamanlayici); kapat('m-search');
+    SES.bitis(); bildir('Rakip bulundu! ⚔️');
+    odayaGir(e.oda);
+}
+
+async function odaKur(tur) {
+    const govde = { tur, ad: oyuncuAdi(), sure: depoAl(localStorage, 'goaltech_sure') || '3+0' };
+    if (tur === 'bot') govde.zorluk = segDeger($('bot-level'));
+    const r = await api('/api/oda', govde);
+    if (!r.success) { bildir(r.error, true); return; }
+    odayaGir(r.oda);
+}
+
+function davetKatil() { odayaGir(new URLSearchParams(location.search).get('oda')); }
+
+// =====================================================================
+// Oda / oyun durumu
+// =====================================================================
+let taraf = 'izleyici', S = null, surum = -1, yoklama = null, ws = null;
+let secili = null, gecerliler = [], islemde = false, bekleyenTerfi = null, ters = false;
+let saatTaban = null, saatAn = 0, sonHamleSayisi = null, gosterilenBitis = null, sohbetSon = 0;
+
+async function odayaGir(id) {
+    clearInterval(lobiZamanlayici);
+    oda = id;
+    try { history.replaceState(null, '', location.pathname + '?oda=' + encodeURIComponent(id)); } catch (e) {}
+    const r = await api('/api/katil', { ad: oyuncuAdi() });
+    if (!r.success) { oda = null; bildir(r.yok ? 'Oda bulunamadı veya süresi doldu.' : r.error, true); menuyeDon(); return; }
+    taraf = r.taraf; ters = taraf === 'siyah';
+    S = null; surum = -1; secili = null; gecerliler = []; sonHamleSayisi = null; gosterilenBitis = null; sohbetSon = 0;
+    $('chat-msgs').innerHTML = '';
+    $('menu').classList.add('hidden'); $('game').classList.remove('hidden');
+    tahtaKur();
+    await durumAl(true);
+    clearInterval(yoklama); yoklama = setInterval(durumAl, 1000);
+    canliBaglan();
+}
+
+async function odadanCik() {
+    clearInterval(yoklama); yoklama = null; if (ws) { try { ws.close(); } catch (e) {} ws = null; }
+    if (oda && taraf !== 'izleyici') { try { await api('/api/ayril', {}); } catch (e) {} }
+    oda = null; S = null;
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    menuGoster();
+}
+
+let durumIstek = 0;
+async function durumAl(zorla) {
+    if (!oda || (durumAl.mesgul && !zorla)) return;
+    durumAl.mesgul = true;
+    const no = ++durumIstek;
+    try {
+        const r = await api('/api/durum?v=' + (zorla ? -1 : surum));
+        if (no < durumIstek && !zorla) return;
+        if (!r.success) { if (r.yok) { bildir('Oda kapandı.', true); odadanCik(); } return; }
+        taraf = r.taraf;
+        if (r.ayni) { saatGuncelle(r.sure); if (S) { S.oyuncular.beyaz.bagli = r.bagli.beyaz; S.oyuncular.siyah.bagli = r.bagli.siyah; barlariCiz(); } return; }
+        durumUygula(r.oda);
+    } catch (e) {
+    } finally { durumAl.mesgul = false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && oda) durumAl(true); });
+
+function benimSiram() { return S && !S.bitti && taraf !== 'izleyici' && (taraf === 'beyaz') === S.beyaz_sirasi && herkesHazir(); }
+function herkesHazir() { return S && S.oyuncular.beyaz.katildi && S.oyuncular.siyah.katildi; }
+
+function durumUygula(o) {
+    const onceki = S;
+    S = o; surum = o.surum;
+    const yeniHamle = sonHamleSayisi !== null && o.hamleler.length === sonHamleSayisi + 1;
+    if (sonHamleSayisi !== null && o.hamleler.length !== sonHamleSayisi) { secili = null; gecerliler = []; }
+    if (yeniHamle) {
+        const san = o.hamleler[o.hamleler.length - 1];
+        if (san.includes('+') || san.includes('#')) SES.sah(); else if (san.includes('x')) SES.alma(); else SES.hamle();
+    }
+    sonHamleSayisi = o.hamleler.length;
+    saatGuncelle(o.sure);
+    tahtaCiz();
+    if (yeniHamle) hamleAnimasyonu();
+    barlariCiz(); hamleListesi(); mesajCiz(); dugmeler(); istekPenceresi(); sohbetCiz(o.sohbet || []);
+    $('time-box').style.display = (o.tur !== 'lobi' && taraf !== 'izleyici' && (!o.hamleler.length || o.bitti)) ? '' : 'none';
+    segKur($('game-time'), SURELER, o.sure_ayari, sureDegistir);
+    const etiket = o.tur === 'bot' ? '🤖 Bot · ' + (SEVIYE[o.bot] || '') : o.tur === 'lobi' ? (o.puanli ? '⚡ Puanlı · ' : '⚡ Puansız · ') + o.sure_ayari : '👥 Arkadaş · ' + o.sure_ayari;
+    $('mode-label').innerText = etiket;
+    if (o.bitti && gosterilenBitis !== o.hamleler.length + ':' + o.sonuc && (onceki ? !onceki.bitti : true) && !(o.sonuc === '*' && taraf === 'izleyici')) {
+        gosterilenBitis = o.hamleler.length + ':' + o.sonuc;
+        if (onceki) { SES.bitis(); bitisPenceresi(); }
+    }
+    if (!o.bitti) { gosterilenBitis = null; kapat('m-over'); }
+    if (o.bitti && o.elo_degisim && $('m-over').classList.contains('open')) eloYaz();
+}
+
+// ---------------- Tahta ----------------
+let kareler = [];
+function tahtaKur() {
+    const b = $('board'); b.innerHTML = ''; kareler = [];
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+        const sq = document.createElement('div');
+        sq.addEventListener('pointerdown', e => { e.preventDefault(); const k = kareler[i * 8 + j]; kareTiklandi(k.r, k.c); });
+        b.appendChild(sq);
+        kareler.push({ el: sq, r: 0, c: 0, tas: null, ipucu: null, koord: null });
+    }
+    yonUygula();
+}
+function yonUygula() {
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+        const k = kareler[i * 8 + j];
+        k.r = ters ? 7 - i : i; k.c = ters ? 7 - j : j; k.tas = null; k.ipucu = null;
+        k.el.innerHTML = '';
+        let koord = '';
+        if (j === 0) koord += `<span class="coord rank">${8 - k.r}</span>`;
+        if (i === 7) koord += `<span class="coord file">${'abcdefgh'[k.c]}</span>`;
+        k.el.insertAdjacentHTML('beforeend', koord);
+    }
+}
+function tahtayiCevir() { ters = !ters; yonUygula(); tahtaCiz(); barlariCiz(); }
+function kareBul(r, c) { return kareler.find(k => k.r === r && k.c === c); }
+function tasEl(p) {
+    const img = document.createElement('img'); img.className = 'piece'; img.src = IMAGES[p]; img.alt = p; img.draggable = false;
+    img.onerror = () => { const g = document.createElement('span'); g.className = 'piece glyph ' + (p === p.toUpperCase() ? 'glyph-w' : 'glyph-b'); g.textContent = GLYPHS[p.toLowerCase()] + '︎'; img.replaceWith(g); };
+    return img;
+}
+function tahtaCiz() {
+    if (!S) return;
+    const son = S.son_hamle ? S.son_hamle.flatMap(m => m) : [];
+    kareler.forEach(k => {
+        const p = S.tahta[k.r][k.c];
+        let cls = 'square ' + ((k.r + k.c) % 2 ? 'dark' : 'light');
+        if (son.some(s => s[0] === k.r && s[1] === k.c)) cls += ' last';
+        if (secili && secili[0] === k.r && secili[1] === k.c) cls += ' sel';
+        if (S.sah_tehdit && p === (S.beyaz_sirasi ? 'K' : 'k')) cls += ' check';
+        if (k.el.className !== cls) k.el.className = cls;
+        if (k.tas !== p) {
+            const eski = k.el.querySelector('.piece'); if (eski) eski.remove();
+            if (p !== ' ') k.el.prepend(tasEl(p));
+            k.tas = p;
+        }
+        const ip = gecerliler.some(m => m[0] === k.r && m[1] === k.c) ? (p !== ' ' ? 'ring' : 'dot') : null;
+        if (k.ipucu !== ip) {
+            const e = k.el.querySelector('.hint-dot, .hint-ring'); if (e) e.remove();
+            if (ip) { const d = document.createElement('div'); d.className = ip === 'dot' ? 'hint-dot' : 'hint-ring'; k.el.appendChild(d); }
+            k.ipucu = ip;
+        }
+    });
+    // Rakip henüz gelmediyse tahtanın üstüne bilgi
+    const ov = $('board-overlay');
+    if (S.tur === 'arkadas' && !herkesHazir()) {
+        $('ov-title').innerText = 'Rakip bekleniyor ⏳';
+        $('ov-sub').innerText = 'Davet linkini arkadaşına gönder.';
+        $('ov-btn').innerHTML = '<button class="btn green" onclick="paylas()">🔗 Linki Paylaş</button>';
+        ov.classList.remove('hidden');
+    } else ov.classList.add('hidden');
+}
+function hamleAnimasyonu() {
+    (S.son_hamle || []).forEach(([a, b]) => {
+        const ka = kareBul(a[0], a[1]), kb = kareBul(b[0], b[1]);
+        const el = kb && kb.el.querySelector('.piece');
+        if (!ka || !el || !el.animate) return;
+        const x = ka.el.getBoundingClientRect(), y = kb.el.getBoundingClientRect();
+        el.style.zIndex = 40;
+        el.animate([{ transform: `translate(${x.left - y.left}px, ${x.top - y.top}px)` }, { transform: 'none' }], { duration: 180, easing: 'ease-out' })
+          .onfinish = () => { el.style.zIndex = ''; };
+    });
+}
+function salla() { const b = $('board'); b.classList.remove('shake'); void b.offsetWidth; b.classList.add('shake'); }
+
+async function kareTiklandi(r, c) {
+    if (!benimSiram() || islemde || S.istek) return;
+    const p = S.tahta[r][c];
+    if (secili && gecerliler.some(m => m[0] === r && m[1] === c)) {
+        const sp = S.tahta[secili[0]][secili[1]];
+        if (sp.toUpperCase() === 'P' && (r === 0 || r === 7)) { terfiSor(secili, [r, c]); return; }
+        hamleGonder(secili, [r, c]); return;
+    }
+    if (secili && secili[0] === r && secili[1] === c) { secili = null; gecerliler = []; tahtaCiz(); return; }
+    const benimTas = p !== ' ' && (p === p.toUpperCase()) === (taraf === 'beyaz');
+    if (!benimTas) { if (secili && p === ' ') salla(); secili = null; gecerliler = []; tahtaCiz(); return; }
+    secili = [r, c]; gecerliler = []; tahtaCiz();
+    islemde = true;
+    try {
+        const d = await api('/api/gecerli', { r, c });
+        if (secili && secili[0] === r && secili[1] === c) { gecerliler = d.moves || []; if (!gecerliler.length) salla(); }
+    } catch (e) {} finally { islemde = false; tahtaCiz(); }
+}
+function terfiSor(a, b) {
+    bekleyenTerfi = { a, b };
+    const o = $('promo-options'); o.innerHTML = '';
+    (taraf === 'beyaz' ? ['Q', 'R', 'B', 'N'] : ['q', 'r', 'b', 'n']).forEach(p => {
+        const d = document.createElement('div'); d.className = 'promo-piece'; d.appendChild(tasEl(p));
+        d.onclick = () => { kapat('m-promo'); const t = bekleyenTerfi; bekleyenTerfi = null; hamleGonder(t.a, t.b, p); };
+        o.appendChild(d);
+    });
+    ac('m-promo');
+}
+$('m-promo').addEventListener('click', e => { if (e.target.id === 'm-promo') { kapat('m-promo'); bekleyenTerfi = null; } });
+
+async function hamleGonder(a, b, terfi) {
+    islemde = true;
+    try {
+        const d = await api('/api/hamle', { from: a, to: b, promotion: terfi || null });
+        secili = null; gecerliler = [];
+        if (!d.success) { mesajYaz(d.error, 'err'); salla(); }
+    } catch (e) { mesajYaz('Bağlantı hatası, tekrar dene.', 'err'); }
+    finally { islemde = false; }
+    await durumAl(true);
+}
+
+// ---------------- Oyuncu çubukları ve saat ----------------
+function saatGuncelle(sure) { saatTaban = sure; saatAn = performance.now(); saatCiz(); }
+function anlikSure(t) {
+    if (!saatTaban) return 0;
+    let s = saatTaban[t];
+    if (S && S.saat_isliyor && (t === 'beyaz') === S.beyaz_sirasi) s -= (performance.now() - saatAn) / 1000;
+    return Math.max(0, s);
+}
+function saatCiz() {
+    if (!S) return;
+    ['beyaz', 'siyah'].forEach(t => {
+        const el = document.querySelector(`.clock[data-t="${t}"]`);
+        if (!el) return;
+        const s = anlikSure(t);
+        el.innerText = sureMetni(s);
+        const isliyor = S.saat_isliyor && (t === 'beyaz') === S.beyaz_sirasi;
+        el.classList.toggle('run', isliyor && s > 20);
+        el.classList.toggle('low', isliyor && s <= 20);
+    });
+}
+setInterval(saatCiz, 100);
+
+function barlariCiz() {
+    if (!S) return;
+    const alt = ters ? 'siyah' : 'beyaz', ust = ters ? 'beyaz' : 'siyah';
+    [['bar-top', ust], ['bar-bottom', alt]].forEach(([id, t]) => {
+        const p = S.oyuncular[t];
+        const ad = p.ad || (t === 'beyaz' ? 'Beyaz' : 'Siyah');
+        const elo = p.elo ? `<span class="pelo">(${p.elo})</span>` : '';
+        const fark = S.skor[t] - S.skor[t === 'beyaz' ? 'siyah' : 'beyaz'];
+        const yedigi = (S.alinan[t] || []).join('');
+        const bagli = p.katildi && p.bagli;
+        const ikon = S.tur === 'bot' && t === 'siyah' ? '🤖 ' : (t === taraf ? '' : '');
+        $(id).innerHTML = `<div class="pinfo"><div class="pname"><span class="dot ${bagli ? 'on' : ''}"></span>${ikon}${esc(ad)}${elo}${t === taraf ? ' <span class="muted">(sen)</span>' : ''}</div>
+            <div class="pcaps">${yedigi}${fark > 0 ? '<b>+' + fark + '</b>' : ''}</div></div><div class="clock" data-t="${t}"></div>`;
+        $(id).classList.toggle('turn', !S.bitti && (t === 'beyaz') === S.beyaz_sirasi);
+    });
+    saatCiz();
+}
+
+function hamleListesi() {
+    const el = $('moves'), h = S.hamleler;
+    if (!h.length) { el.innerHTML = '<div class="empty">Henüz hamle yok</div>'; return; }
+    let html = '<table>';
+    for (let i = 0; i < h.length; i += 2) {
+        html += `<tr><td class="n">${i / 2 + 1}.</td><td class="m ${i === h.length - 1 ? 'cur' : ''}">${esc(h[i])}</td><td class="m ${i + 1 === h.length - 1 ? 'cur' : ''}">${esc(h[i + 1] || '')}</td></tr>`;
+    }
+    if (S.bitti && S.sonuc) html += `<tr><td></td><td colspan="2" class="muted">${esc(S.sonuc === '*' ? 'iptal' : S.sonuc)}</td></tr>`;
+    el.innerHTML = html + '</table>';
+    el.scrollTop = el.scrollHeight;
+}
+
+function mesajYaz(m, cls) { $('msg').innerText = m; $('msg').className = cls || ''; }
+function mesajCiz() {
+    if (S.bitti) { mesajYaz(S.mesaj, 'warn'); return; }
+    if (S.mesaj) { mesajYaz(S.mesaj, 'warn'); return; }
+    if (taraf === 'izleyici') { mesajYaz('👁 İzleyici olarak izliyorsun', ''); return; }
+    if (!herkesHazir()) { mesajYaz('', ''); return; }
+    const rakip = taraf === 'beyaz' ? 'siyah' : 'beyaz';
+    if (S.bot_dusunuyor) { mesajYaz('Bot düşünüyor 🤖', ''); $('msg').classList.add('dots'); return; }
+    if (!S.oyuncular[rakip].bagli && S.tur !== 'bot') { mesajYaz('Rakibin bağlantısı koptu, bekleniyor ⚠️', 'warn'); return; }
+    if (benimSiram()) mesajYaz(S.sah_tehdit ? 'ŞAH! Şahını koru ⚠️' : 'Sıra sende', S.sah_tehdit ? 'err' : 'ok');
+    else mesajYaz('Rakip düşünüyor…', '');
+}
+
+function dugmeler() {
+    const oyuncu = taraf !== 'izleyici', h = S.hamleler.length;
+    $('btn-undo').style.display = oyuncu && !S.puanli ? '' : 'none';
+    $('btn-undo').disabled = !h || !!S.istek;
+    $('btn-draw').style.display = oyuncu && !S.bitti ? '' : 'none';
+    $('btn-draw').disabled = !h || !!S.istek;
+    $('btn-resign').style.display = oyuncu && !S.bitti ? '' : 'none';
+    $('btn-resign').innerText = !h && S.tur !== 'bot' ? '✖ İptal Et' : '🏳 Teslim Ol';
+    $('btn-new').style.display = oyuncu && (S.bitti || S.tur === 'bot' || !h) ? '' : 'none';
+    $('btn-new').innerText = S.tur === 'bot' || !h ? '🔄 Yeni Oyun' : '🔄 Rövanş';
+    $('btn-share').style.display = S.tur === 'arkadas' && oyuncu ? '' : 'none';
+    $('chat-box').style.display = S.tur === 'bot' ? 'none' : '';
+    $('chat-row').style.display = oyuncu ? '' : 'none';
+}
+
+// ---------------- İstekler ----------------
+async function istekGonder(tip, ek) {
+    const r = await api('/api/istek', Object.assign({ tip }, ek || {}));
+    if (!r.success) bildir(r.error, true);
+    else if (r.reddedildi) bildir(r.mesaj || 'Reddedildi', true);
+    await durumAl(true);
+}
+async function beraberlikTeklif() { if (await onayla('Rakibine beraberlik teklif edilsin mi?', 'Teklif Et')) istekGonder('berabere'); }
+async function teslimOl() {
+    const iptal = !S.hamleler.length && S.tur !== 'bot';
+    if (!await onayla(iptal ? 'Oyun iptal edilsin mi?' : 'Teslim olmak istediğine emin misin?', iptal ? 'İptal Et' : 'Teslim Ol')) return;
+    const r = await api('/api/teslim', {}); if (!r.success) bildir(r.error, true);
+    await durumAl(true);
+}
+function yeniOyun() {
+    kapat('m-over');
+    istekGonder('yeni', S && S.tur === 'bot' ? { zorluk: S.bot } : undefined);
+}
+async function sureDegistir(v) {
+    const r = await api('/api/sure', { sure: v }); if (!r.success) bildir(r.error, true);
+    depoYaz(localStorage, 'goaltech_sure', v);
+    await durumAl(true);
+}
+function istekPenceresi() {
+    const i = S.istek;
+    if (!i || taraf === 'izleyici') { kapat('m-request'); return; }
+    const benim = i.taraf === taraf;
+    const metin = {
+        geri: benim ? 'Rakibinin geri alma onayı bekleniyor…' : 'Rakibin son hamlesini geri almak istiyor.',
+        berabere: benim ? 'Beraberlik teklifin rakibe iletildi…' : 'Rakibin beraberlik teklif ediyor.',
+        yeni: benim ? 'Rövanş isteğin rakibe iletildi…' : 'Rakibin rövanş istiyor. Renkler değişecek.'
+    }[i.tip];
+    $('req-text').innerText = metin;
+    $('req-icon').innerText = benim ? '⏳' : { geri: '↩️', berabere: '🤝', yeni: '🔄' }[i.tip];
+    $('req-answer').style.display = benim ? 'none' : ''; $('req-cancel').style.display = benim ? '' : 'none';
+    ac('m-request');
+}
+async function istekCevapla(kabul) { kapat('m-request'); await api('/api/cevap', { kabul }); await durumAl(true); }
+
+// ---------------- Oyun sonu ----------------
+function bitisPenceresi() {
+    const sonuc = S.sonuc;
+    let ikon = '🤝';
+    if (sonuc === '1-0' || sonuc === '0-1') {
+        const beyazKazandi = sonuc === '1-0';
+        ikon = taraf === 'izleyici' ? '🏁' : ((taraf === 'beyaz') === beyazKazandi ? '🏆' : (S.tur === 'bot' ? '🤖' : '😔'));
+    } else if (sonuc === '*') ikon = '✖';
+    $('over-icon').innerText = ikon;
+    $('over-title').innerText = S.mesaj;
+    eloYaz();
+    const b = $('over-btns'); b.innerHTML = '';
+    const ekle = (metin, cls, fn) => { const x = document.createElement('button'); x.className = 'btn ' + cls; x.innerText = metin; x.onclick = fn; b.appendChild(x); };
+    if (taraf !== 'izleyici') {
+        if (S.tur === 'lobi') ekle('⚡ Yeni Rakip', 'green', () => { kapat('m-over'); odadanCik().then(rakipAra); });
+        ekle(S.tur === 'bot' ? '🔄 Yeni Oyun' : '🔄 Rövanş', S.tur === 'lobi' ? '' : 'green', yeniOyun);
+    }
+    if (S.mac_id) ekle('▶ Tekrar İzle', '', () => tekrarAc(S.mac_id));
+    ekle('Tahtaya Bak', '', () => kapat('m-over'));
+    ac('m-over');
+}
+function eloYaz() {
+    const d = S.elo_degisim;
+    if (!d || taraf === 'izleyici' || d[taraf] == null) { $('over-elo').innerText = S.puanli ? 'Puan hesaplanıyor…' : ''; return; }
+    const x = d[taraf];
+    $('over-elo').innerHTML = `Elo: <b style="color:${x >= 0 ? 'var(--green)' : '#f19999'}">${x >= 0 ? '+' : ''}${x}</b>`;
+    hesapYukle();
+}
+
+// ---------------- Sohbet ----------------
+function sohbetCiz(liste) {
+    const kutu = $('chat-msgs');
+    const yeni = liste.filter(m => m.no > sohbetSon);
+    if (liste.length && liste[liste.length - 1].no < sohbetSon) { kutu.innerHTML = ''; sohbetSon = 0; return sohbetCiz(liste); }
+    if (!yeni.length) { if (!kutu.children.length) kutu.innerHTML = '<div class="empty">Henüz mesaj yok</div>'; return; }
+    if (sohbetSon === 0) kutu.innerHTML = '';
+    yeni.forEach(m => {
+        const d = document.createElement('div'); d.className = 'chat-msg ' + (m.taraf === taraf ? 'mine' : 'theirs');
+        const ad = S.oyuncular[m.taraf] ? S.oyuncular[m.taraf].ad : m.taraf;
+        d.innerHTML = `<span class="who">${esc(ad)}</span>`; d.appendChild(document.createTextNode(m.metin));
+        kutu.appendChild(d);
+        if (sohbetSon && m.taraf !== taraf) ton(700, .06);
+    });
+    while (kutu.children.length > 60) kutu.removeChild(kutu.firstChild);
+    sohbetSon = liste[liste.length - 1].no;
+    kutu.scrollTop = kutu.scrollHeight;
+}
+async function sohbetGonder() {
+    const i = $('chat-input'), m = i.value.trim(); if (!m) return;
+    i.value = ''; const r = await api('/api/sohbet', { metin: m }); if (!r.success) bildir(r.error, true);
+    await durumAl(true);
+}
+
+async function paylas() {
+    const link = location.origin + location.pathname + '?oda=' + encodeURIComponent(oda);
+    if (navigator.share) { try { await navigator.share({ title: 'Goaltech Chess', text: 'Benimle satranç oyna!', url: link }); return; } catch (e) { return; } }
+    try { await navigator.clipboard.writeText(link); bildir('Davet linki kopyalandı 🔗'); } catch (e) { prompt('Linki kopyala:', link); }
+}
+
+// =====================================================================
+// Canlı bağlantı (sunucu destekliyorsa WebSocket; yoksa yoklama yeterli)
+// =====================================================================
+function canliBaglan() {
+    if (!('WebSocket' in window) || !oda) return;
+    try {
+        const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+        const s = new WebSocket(proto + location.host + '/ws?oda=' + encodeURIComponent(oda));
+        let acildi = false;
+        s.onopen = () => { acildi = true; ws = s; clearInterval(yoklama); yoklama = setInterval(durumAl, 2500); };
+        s.onmessage = e => { try { const m = JSON.parse(e.data); if (m.surum !== undefined && m.surum !== surum) durumAl(true); } catch (x) {} };
+        s.onclose = () => {
+            if (ws === s) { ws = null; clearInterval(yoklama); yoklama = setInterval(durumAl, 1000); }
+            if (acildi && oda) setTimeout(canliBaglan, 3000);
+        };
+        s.onerror = () => {};
+    } catch (e) {}
+}
+
+// =====================================================================
+// Liderlik, profil, maç tekrarı
+// =====================================================================
+async function liderlikAc() {
+    $('leader-body').innerHTML = '<div class="empty">Yükleniyor…</div>'; ac('m-leader');
+    const r = await api('/api/liderlik');
+    if (!r.liste.length) { $('leader-body').innerHTML = '<div class="empty">Henüz puanlı oyun oynanmadı. İlk sen ol! ⚡</div>'; return; }
+    let h = '<table class="tbl"><tr><th>#</th><th>Oyuncu</th><th>Elo</th><th>Oyun</th><th>G / B / M</th></tr>';
+    r.liste.forEach((k, i) => { h += `<tr class="click" onclick="profilAc('${esc(k.ad)}')"><td>${i + 1}</td><td><b>${esc(k.ad)}</b></td><td class="win">${k.elo}</td><td>${k.oyun}</td><td>${k.galibiyet} / ${k.beraberlik} / ${k.maglubiyet}</td></tr>`; });
+    $('leader-body').innerHTML = h + '</table>';
+}
+async function profilAc(ad) {
+    ad = ad || (ben && ben.ad); if (!ad) return;
+    kapat('m-leader'); $('profile-title').innerText = '👤 ' + ad; $('profile-body').innerHTML = '<div class="empty">Yükleniyor…</div>'; ac('m-profile');
+    const r = await api('/api/profil/' + encodeURIComponent(ad));
+    if (!r.success) { $('profile-body').innerHTML = '<div class="empty">' + esc(r.error) + '</div>'; return; }
+    const k = r.kullanici;
+    let h = `<div class="stats"><div class="stat"><b class="win">${k.elo}</b><span>Elo</span></div><div class="stat"><b>${k.galibiyet}</b><span>Galibiyet</span></div>
+        <div class="stat"><b>${k.beraberlik}</b><span>Beraberlik</span></div><div class="stat"><b>${k.maglubiyet}</b><span>Mağlubiyet</span></div></div>`;
+    if (!r.maclar.length) h += '<div class="empty">Henüz kayıtlı maç yok</div>';
+    else {
+        h += '<table class="tbl"><tr><th>Rakip</th><th>Sonuç</th><th>Tür</th><th>Hamle</th><th>Elo</th><th>Tarih</th></tr>';
+        r.maclar.forEach(m => {
+            const beyaz = m.beyaz_ad === k.ad && (m.beyaz_id != null || m.siyah_ad !== k.ad);
+            const rakip = beyaz ? m.siyah_ad : m.beyaz_ad;
+            const kazanc = m.sonuc === '1/2-1/2' ? 'draw' : ((m.sonuc === '1-0') === beyaz ? 'win' : 'loss');
+            const yazi = { win: 'Galibiyet', loss: 'Mağlubiyet', draw: 'Berabere' }[kazanc];
+            const deg = beyaz ? m.beyaz_degisim : m.siyah_degisim;
+            const tur = m.tur === 'bot' ? '🤖 ' + (SEVIYE[m.bot_zorluk] || '') : m.puanli ? '⚡ Puanlı' : (m.tur === 'lobi' ? '⚡' : '👥');
+            h += `<tr class="click" onclick="tekrarAc(${m.id})"><td>${beyaz ? '⚪' : '⚫'} ${esc(rakip)}</td><td class="${kazanc}">${yazi}</td><td>${tur} <span class="muted">${esc(m.sure_ayari || '')}</span></td>
+                <td>${Math.ceil((m.hamle || 0) / 2)}</td><td>${deg == null ? '<span class="muted">–</span>' : `<span class="${deg >= 0 ? 'win' : 'loss'}">${deg >= 0 ? '+' : ''}${deg}</span>`}</td>
+                <td class="muted">${new Date(m.tarih * 1000).toLocaleDateString('tr-TR')}</td></tr>`;
+        });
+        h += '</table>';
+    }
+    $('profile-body').innerHTML = h;
+}
+
+let rp = { tahtalar: [], san: [], son: [], i: 0, kareler: [] };
+async function tekrarAc(mid) {
+    kapat('m-over'); kapat('m-profile');
+    const r = await api('/api/mac/' + mid);
+    if (!r.success) { bildir(r.error, true); return; }
+    rp = { tahtalar: r.tahtalar, san: r.san, son: r.son_hamleler, i: r.tahtalar.length - 1, kareler: [] };
+    const m = r.mac;
+    $('replay-title').innerText = `${m.beyaz_ad || 'Beyaz'} – ${m.siyah_ad || 'Siyah'}`;
+    $('replay-info').innerText = `${m.sonuc} · ${m.sure_ayari || ''} · ${new Date(m.tarih * 1000).toLocaleString('tr-TR')}`;
+    const b = $('replay-board'); b.innerHTML = '';
+    for (let x = 0; x < 64; x++) { const d = document.createElement('div'); b.appendChild(d); rp.kareler.push(d); }
+    let h = '<table>';
+    for (let i = 0; i < rp.san.length; i += 2) h += `<tr><td class="n">${i / 2 + 1}.</td><td class="m" data-i="${i + 1}">${esc(rp.san[i])}</td><td class="m" data-i="${i + 2}">${esc(rp.san[i + 1] || '')}</td></tr>`;
+    $('replay-moves').innerHTML = h + '</table>';
+    $('replay-moves').querySelectorAll('td.m').forEach(td => td.onclick = () => tekrarGit(+td.dataset.i));
+    ac('m-replay'); tekrarGit(rp.i);
+}
+function tekrarGit(i) {
+    if (!rp.tahtalar.length) return;
+    rp.i = Math.max(0, Math.min(rp.tahtalar.length - 1, i));
+    const t = rp.tahtalar[rp.i], son = rp.son[rp.i] || [];
+    for (let x = 0; x < 64; x++) {
+        const r = Math.floor(x / 8), c = x % 8, d = rp.kareler[x], p = t[x];
+        d.className = 'square ' + ((r + c) % 2 ? 'dark' : 'light') + (son.some(s => s[0] === r && s[1] === c) ? ' last' : '');
+        d.innerHTML = ''; if (p !== ' ') d.appendChild(tasEl(p));
+    }
+    $('replay-moves').querySelectorAll('td.m').forEach(td => td.classList.toggle('cur', +td.dataset.i === rp.i));
+}
+document.addEventListener('keydown', e => {
+    if (!$('m-replay').classList.contains('open')) return;
+    if (e.key === 'ArrowLeft') tekrarGit(rp.i - 1); if (e.key === 'ArrowRight') tekrarGit(rp.i + 1);
+});
+
+// =====================================================================
+// Başlangıç
+// =====================================================================
+(async function baslat() {
+    await hesapYukle();
+    const p = new URLSearchParams(location.search).get('oda');
+    if (!p) { menuGoster(); return; }
+    // Davet linki: hesabı ya da kayıtlı adı varsa doğrudan gir, yoksa ad sor
+    if (ben || depoAl(sessionStorage, 'goaltech_oda_' + p) || kayitliAd) { depoYaz(sessionStorage, 'goaltech_oda_' + p, '1'); odayaGir(p); return; }
+    $('modes-panel').style.display = 'none'; $('join-panel').style.display = '';
+    depoYaz(sessionStorage, 'goaltech_oda_' + p, '1');
+})();
+</script>
+</body>
+</html>
