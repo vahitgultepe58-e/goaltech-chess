@@ -991,8 +991,8 @@ function canliBaglan() {
         const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
         const s = new WebSocket(proto + location.host + '/ws?oda=' + encodeURIComponent(oda));
         let acildi = false;
-        s.onopen = () => { acildi = true; ws = s; clearInterval(yoklama); yoklama = setInterval(durumAl, 4000); };
-        s.onmessage = e => { try { const m = JSON.parse(e.data); if (m.surum !== surum) durumAl(true); } catch (x) {} };
+        s.onopen = () => { acildi = true; ws = s; clearInterval(yoklama); yoklama = setInterval(durumAl, 2500); };
+        s.onmessage = e => { try { const m = JSON.parse(e.data); if (m.surum !== undefined && m.surum !== surum) durumAl(true); } catch (x) {} };
         s.onclose = () => {
             if (ws === s) { ws = null; clearInterval(yoklama); yoklama = setInterval(durumAl, 1000); }
             if (acildi && oda) setTimeout(canliBaglan, 3000);

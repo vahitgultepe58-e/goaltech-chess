@@ -7,7 +7,9 @@ Dosyalar:
     depo.py      SQLite veri katmanı
     index.html   arayüz
 """
+import json
 import os
+import queue
 import random
 import re
 import secrets
@@ -16,6 +18,11 @@ import time
 
 from flask import Flask, jsonify, request, send_file, session
 from werkzeug.security import check_password_hash, generate_password_hash
+
+try:                                   # WebSocket desteği isteğe bağlı (pip install flask-sock)
+    from flask_sock import Sock
+except ImportError:
+    Sock = None
 
 import bot
 import depo
@@ -339,6 +346,23 @@ def _bot_oynat(oid, o, surum):
     mac_kaydet_gerekirse(oid)
 
 
+def bot_tetikle(oid):
+    """Bot hamlesini istemcinin bir sonraki yoklamasını beklemeden arka planda başlatır.
+    Thread desteklenmeyen sunucularda (ör. bazı uWSGI ayarları) yoklama yine botu çalıştırır."""
+    def calis():
+        time.sleep(BOT_BEKLEME + 0.05)
+        try:
+            surum, o = depo.oda_oku(oid)
+            if o is not None:
+                _bot_oynat(oid, o, surum)
+        except Exception:
+            pass
+    try:
+        threading.Thread(target=calis, daemon=True).start()
+    except RuntimeError:
+        pass
+
+
 def _surum_ayni(oid, surum):
     satir = depo.baglanti().execute("SELECT surum FROM odalar WHERE id = ?", (oid,)).fetchone()
     return satir and satir['surum'] == surum
@@ -456,8 +480,12 @@ def api_hamle():
         if not oyun.hamle_gecerli_mi(o, *bas, *hed):
             return ('hata', 'Kural dışı hamle.'), False
         san = oyun.hamle_yap(o, *bas, *hed, terfi)
-        return {'san': san}, True
-    return oyuncu_islemi(fn)
+        return {'san': san, 'bot': o['tur'] == 'bot' and not o['bitti']}, True
+    yanit = oyuncu_islemi(fn)
+    govde = yanit[0] if isinstance(yanit, tuple) else yanit   # hata yanıtları (yanıt, kod) şeklinde
+    if (govde.get_json() or {}).get('bot'):
+        bot_tetikle(oda_id())
+    return yanit
 
 
 @app.route('/api/teslim', methods=['POST'])
@@ -678,6 +706,53 @@ def api_lobi():
         (kim, time.time() - depo.KUYRUK_SURESI))]
     return tamam(eslesme=eslesme, araniyor=bool(benim and not benim['oda']),
                  bekleyenler=bekleyenler, canli=depo.canli_oyunlar())
+
+
+# =====================================================================
+# Gerçek zamanlı bildirim (WebSocket)
+# Oda değiştiğinde bağlı tarayıcılara yeni sürüm numarası gönderilir; tarayıcı da durumu hemen çeker.
+# Sunucu WebSocket desteklemiyorsa (ör. PythonAnywhere) tarayıcı otomatik olarak yoklamaya devam eder.
+# Not: bildirimler aynı işlem içinde dağıtılır; WebSocket kullanırken tek worker + çok thread ile çalıştırın.
+# =====================================================================
+_dinleyiciler = {}
+_dinleyici_kilit = threading.Lock()
+
+
+def _oda_degisti(oid, surum):
+    with _dinleyici_kilit:
+        for q in list(_dinleyiciler.get(oid, ())):
+            q.put(surum)
+
+
+depo.degisim_kancalari.append(_oda_degisti)
+
+if Sock is not None:
+    sock = Sock(app)
+
+    @sock.route('/ws')
+    def ws(baglanti):
+        oid = oda_id()
+        q = queue.Queue()
+        with _dinleyici_kilit:
+            _dinleyiciler.setdefault(oid, set()).add(q)
+        try:
+            surum, _ = depo.oda_oku(oid)
+            baglanti.send(json.dumps({'surum': surum}))
+            while True:
+                try:
+                    surum = q.get(timeout=25)
+                    while not q.empty():          # birikmiş bildirimlerden sadece sonuncusu yeter
+                        surum = q.get_nowait()
+                    baglanti.send(json.dumps({'surum': surum}))
+                except queue.Empty:
+                    baglanti.send(json.dumps({'ping': 1}))
+        finally:
+            with _dinleyici_kilit:
+                kume = _dinleyiciler.get(oid)
+                if kume:
+                    kume.discard(q)
+                    if not kume:
+                        _dinleyiciler.pop(oid, None)
 
 
 if __name__ == '__main__':

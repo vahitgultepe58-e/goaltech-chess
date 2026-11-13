@@ -1,0 +1,12 @@
+# Render.com için yayın ayarı (WebSocket destekli).
+# Not: Ücretsiz planda disk kalıcı değildir; hesapların ve maçların kaybolmaması için
+# kalıcı disk ekleyip GOALTECH_DB'yi o diske yönlendirin (ör. /var/data/goaltech_chess.db).
+services:
+  - type: web
+    name: goaltech-chess
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --worker-class gthread --workers 1 --threads 64 --timeout 120 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: GOALTECH_SECRET
+        generateValue: true
