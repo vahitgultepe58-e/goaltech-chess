@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Yönetim Paneli</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root { --bg: #262522; --panel: #2f2e2b; --line: #3d3c39; --input: #1f1e1c; --text: #e8e6e3; --muted: #a3a29f; --green: #81b64c; --red: #f19999; --gold: #d9c35a; }
+* { box-sizing: border-box; font-family: 'Outfit', sans-serif; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 16px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+.logo { font-family: 'Anton', 'Impact', sans-serif; font-size: 24px; color: var(--green); letter-spacing: 1px; text-decoration: none; }
+.logo span { color: var(--text); }
+h1 { font-size: 20px; margin: 0; }
+.btn { border: 1px solid var(--line); background: #3a3936; color: var(--text); border-radius: 10px; padding: 8px 14px; font-weight: 700; cursor: pointer; font-size: 14px; text-decoration: none; display: inline-block; }
+.btn:hover { filter: brightness(1.15); }
+.btn.active { background: #45753c; border-color: var(--green); color: #fff; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+.card b { display: block; font-size: 28px; }
+.card span { color: var(--muted); font-size: 13px; }
+.card.live b { color: var(--green); }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.box { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; overflow-x: auto; }
+.filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+select, input { background: var(--input); color: var(--text); border: 1px solid var(--line); border-radius: 9px; padding: 8px 10px; font-size: 14px; outline: none; }
+input:focus, select:focus { border-color: var(--green); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; color: var(--muted); font-size: 12px; text-transform: uppercase; padding: 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 8px; border-bottom: 1px solid #353431; vertical-align: top; }
+tr:hover td { background: #34332f; }
+.time { white-space: nowrap; }
+.time small { display: block; color: var(--muted); font-size: 12px; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 12px; font-weight: 700; background: #3a3936; white-space: nowrap; }
+.tag.uye { background: #45753c; color: #fff; }
+.t-giris_hatali { color: var(--red); } .t-kayit { color: var(--green); } .t-oyun_bitti { color: var(--gold); }
+.muted { color: var(--muted); }
+.note { color: var(--muted); font-size: 12.5px; margin-top: 12px; line-height: 1.5; }
+.center { text-align: center; padding: 40px 10px; }
+.empty { color: var(--muted); text-align: center; padding: 24px; }
+@media (max-width: 760px) { .cards { grid-template-columns: repeat(2, 1fr); } .card b { font-size: 22px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <div style="display:flex;align-items:center;gap:14px"><a class="logo" href="/">GOALTECH <span>CHESS</span></a><h1>Yönetim Paneli</h1></div>
+        <div><span class="muted" id="guncel" style="font-size:13px;margin-right:8px"></span><button class="btn" onclick="yukle()">↻ Yenile</button> <a class="btn" href="/">Oyuna dön</a></div>
+    </header>
+    <div id="hata" class="box center" style="display:none"></div>
+    <div id="icerik" style="display:none">
+        <div class="cards" id="kartlar"></div>
+        <div class="tabs">
+            <button class="btn active" data-s="olaylar" onclick="sekme('olaylar')">📋 Olaylar</button>
+            <button class="btn" data-s="uyeler" onclick="sekme('uyeler')">👤 Üyeler</button>
+            <button class="btn" data-s="canli" onclick="sekme('canli')">🟢 Şu an oynananlar</button>
+        </div>
+        <div class="box" id="s-olaylar">
+            <div class="filters">
+                <select id="f-tur" onchange="yukle()"><option value="">Tüm olaylar</option></select>
+                <input id="f-ara" placeholder="Ad veya detay ara…" oninput="clearTimeout(window._a); window._a = setTimeout(yukle, 400)">
+            </div>
+            <div id="olaylar"></div>
+        </div>
+        <div class="box" id="s-uyeler" style="display:none"><div id="uyeler"></div></div>
+        <div class="box" id="s-canli" style="display:none"><div id="canli"></div></div>
+        <div class="note">
+            Kayıtlar 90 gün saklanır ve sonra otomatik silinir. IP adresi saklanmaz; cihaz bilgisi tarayıcının bildirdiği
+            kaba bilgidir (telefon/bilgisayar, işletim sistemi, tarayıcı). "Ziyaretçi" sayısı, aynı tarayıcının 6 saat içindeki
+            tekrar gelişlerini bir kez sayar.
+        </div>
+    </div>
+</div>
+<script>
+const OLAYLAR = {
+    ziyaret: '👀 Ziyaret', kayit: '🆕 Kayıt oldu', giris: '🔑 Giriş yaptı', giris_hatali: '⚠️ Hatalı giriş', cikis: '🚪 Çıkış yaptı',
+    rakip_aradi: '🔎 Rakip aradı', oyun_basladi: '▶️ Oyun başladı', katildi: '🤝 Odaya katıldı', izledi: '👁 İzlemeye girdi', oyun_bitti: '🏁 Oyun bitti'
+};
+const TUR = { bot: '🤖 Bot', lobi: '⚡ Rakip Bul', arkadas: '👥 Arkadaş' };
+const $ = id => document.getElementById(id);
+Object.entries(OLAYLAR).forEach(([k, v]) => $('f-tur').insertAdjacentHTML('beforeend', `<option value="${k}">${v}</option>`));
+
+function esc(s) { const d = document.createElement('div'); d.innerText = s == null ? '' : s; return d.innerHTML; }
+function tarih(t) {
+    if (!t) return '<span class="muted">–</span>';
+    const d = new Date(t * 1000), fark = (Date.now() / 1000 - t);
+    const once = fark < 60 ? 'az önce' : fark < 3600 ? Math.floor(fark / 60) + ' dk önce' : fark < 86400 ? Math.floor(fark / 3600) + ' saat önce' : Math.floor(fark / 86400) + ' gün önce';
+    return `<span class="time">${d.toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit' })}<small>${once}</small></span>`;
+}
+function sure(a) { if (!a) return ''; const [d, e] = a.split('+'); return d + ' dk' + (+e ? ' +' + e + ' sn' : ''); }
+function sekme(s) {
+    document.querySelectorAll('.tabs .btn').forEach(b => b.classList.toggle('active', b.dataset.s === s));
+    ['olaylar', 'uyeler', 'canli'].forEach(x => $('s-' + x).style.display = x === s ? '' : 'none');
+}
+
+async function yukle() {
+    const p = new URLSearchParams({ tur: $('f-tur').value, ara: $('f-ara').value });
+    let r;
+    try { r = await (await fetch('/api/yonetim?' + p, { credentials: 'same-origin' })).json(); }
+    catch (e) { return; }
+    if (!r.success) {
+        $('icerik').style.display = 'none'; $('hata').style.display = '';
+        $('hata').innerHTML = `<div style="font-size:42px">🔒</div><h2>${esc(r.error)}</h2><p class="muted">Yönetici hesabınla oyunda giriş yap, sonra bu sayfayı yenile.</p><a class="btn" href="/">Oyuna git</a>`;
+        return;
+    }
+    $('hata').style.display = 'none'; $('icerik').style.display = '';
+    $('guncel').innerText = 'Güncellendi: ' + new Date().toLocaleTimeString('tr-TR');
+    const i = r.istatistik;
+    $('kartlar').innerHTML = [
+        ['live', i.cevrimici, 'Şu an çevrimiçi oyuncu'], ['live', i.aktif_oda, 'Şu an açık oda'],
+        ['', i.ziyaretci_24s, 'Ziyaretçi (son 24 saat)'], ['', i.ziyaretci_7g, 'Ziyaretçi (son 7 gün)'],
+        ['', i.oyun_24s, 'Başlayan oyun (24 saat)'], ['', i.mac_toplam, 'Kaydedilen toplam maç'],
+        ['', i.uye, `Üye (bugün +${i.yeni_uye_24s})`], ['live', i.kuyrukta, 'Şu an rakip arayan']
+    ].map(([c, b, s]) => `<div class="card ${c}"><b>${b}</b><span>${s}</span></div>`).join('');
+
+    $('olaylar').innerHTML = !r.olaylar.length ? '<div class="empty">Kayıt yok</div>' :
+        '<table><tr><th>Zaman</th><th>Olay</th><th>Kim</th><th>Ayrıntı</th><th>Cihaz</th></tr>' + r.olaylar.map(o =>
+            `<tr><td>${tarih(o.zaman)}</td><td class="t-${o.tur}">${OLAYLAR[o.tur] || esc(o.tur)}</td>
+             <td>${esc(o.ad || '–')} ${o.kullanici_id ? '<span class="tag uye">üye</span>' : (o.ad ? '<span class="tag">misafir</span>' : '')}</td>
+             <td>${esc(o.detay || '')}</td><td class="muted">${esc(o.cihaz || '')}</td></tr>`).join('') + '</table>';
+
+    $('uyeler').innerHTML = !r.kullanicilar.length ? '<div class="empty">Henüz üye yok</div>' :
+        '<table><tr><th>Kullanıcı</th><th>Kayıt</th><th>Son giriş</th><th>Elo</th><th>Puanlı oyun</th><th>G / B / M</th></tr>' + r.kullanicilar.map(k =>
+            `<tr><td><b>${esc(k.ad)}</b></td><td>${tarih(k.olusturma)}</td><td>${tarih(k.son_giris)}</td><td>${k.elo}</td><td>${k.oyun}</td>
+             <td>${k.galibiyet} / ${k.beraberlik} / ${k.maglubiyet}</td></tr>`).join('') + '</table>';
+
+    $('canli').innerHTML = !r.canli.length ? '<div class="empty">Şu an açık oda yok</div>' :
+        '<table><tr><th>Tür</th><th>Oyuncular</th><th>Süre</th><th>Hamle</th><th>Bağlı kişi</th><th></th></tr>' + r.canli.map(o =>
+            `<tr><td>${TUR[o.tur] || esc(o.tur)}${o.bitti ? ' <span class="tag">bitti</span>' : ''}</td><td>${esc(o.beyaz_ad || '?')} – ${esc(o.siyah_ad || '?')}</td>
+             <td>${sure(o.sure_ayari)}</td><td>${o.hamle_sayisi}</td><td>${o.bagli}</td><td><a class="btn" href="/?oda=${encodeURIComponent(o.id)}&izle=1" target="_blank">İzle</a></td></tr>`).join('') + '</table>';
+}
+yukle();
+setInterval(() => { if (!document.hidden) yukle(); }, 15000);
+</script>
+</body>
+</html>

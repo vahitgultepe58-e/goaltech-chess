@@ -136,5 +136,29 @@ class BotOyunu(unittest.TestCase):
         self.assertEqual(c.durum(oda)['hamleler'], [])
 
 
+class YonetimPaneli(unittest.TestCase):
+    def test_sadece_yonetici_gorur(self):
+        os.environ['GOALTECH_YONETICILER'] = 'Patron'
+        misafir, uye, patron = Istemci('Y1'), Istemci('Y2'), Istemci('Y3')
+        self.assertEqual(misafir.c.get('/api/yonetim').status_code, 401)
+        uye.post('/api/kayit', {'ad': 'SiradanUye', 'sifre': 'gizli123'})
+        self.assertEqual(uye.c.get('/api/yonetim').status_code, 403)
+        r = patron.post('/api/kayit', {'ad': 'Patron', 'sifre': 'gizli123'})
+        self.assertTrue(r['kullanici']['yonetici'])
+        Istemci('Y4').post('/api/giris', {'ad': 'Patron', 'sifre': 'yanlis'})
+        misafir.c.get('/api/ben?z=ziyaretci1', headers={'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile Safari/604.1'})
+        misafir.post('/api/oda', {'tur': 'bot', 'ad': 'Konuk', 'sure': '3+2'})
+        p = patron.get('/api/yonetim')
+        turler = [o['tur'] for o in p['olaylar']]
+        for t in ('kayit', 'giris_hatali', 'ziyaret', 'oyun_basladi'):
+            self.assertIn(t, turler)
+        ziyaret = next(o for o in p['olaylar'] if o['tur'] == 'ziyaret')
+        self.assertEqual(ziyaret['cihaz'], 'Telefon · iOS · Safari')
+        bot_oyunu = next(o for o in p['olaylar'] if o['tur'] == 'oyun_basladi')
+        self.assertIn('3 dk +2 sn', bot_oyunu['detay'])
+        self.assertIn('SiradanUye', [k['ad'] for k in p['kullanicilar']])
+        self.assertGreaterEqual(p['istatistik']['uye'], 2)
+
+
 if __name__ == '__main__':
     unittest.main()

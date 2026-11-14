@@ -13,6 +13,7 @@ DB_YOLU = os.environ.get('GOALTECH_DB') or os.path.join(os.path.dirname(os.path.
 ODA_OMRU = 24 * 60 * 60          # 24 saat dokunulmayan oda silinir
 BAGLANTI_SURESI = 30             # bu kadar saniye ses gelmezse oyuncu "bağlı değil"
 KUYRUK_SURESI = 15               # kuyruktaki oyuncu bu kadar saniye sormazsa düşer
+OLAY_OMRU = 90 * 24 * 60 * 60    # yönetim paneli kayıtları 90 gün saklanır
 
 _yerel = threading.local()
 _onbellek = {}                   # oda_id -> (surum, durum)  (sadece okuma için)
@@ -66,9 +67,18 @@ def kur():
             puanli INTEGER DEFAULT 0, beyaz_elo INTEGER, siyah_elo INTEGER,
             beyaz_degisim INTEGER, siyah_degisim INTEGER, tarih REAL
         );
+        CREATE TABLE IF NOT EXISTS olaylar (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, zaman REAL NOT NULL, tur TEXT NOT NULL,
+            kullanici_id INTEGER, ad TEXT, ziyaretci TEXT, cihaz TEXT, detay TEXT
+        );
+        CREATE INDEX IF NOT EXISTS olaylar_zaman ON olaylar(zaman);
         CREATE INDEX IF NOT EXISTS maclar_beyaz ON maclar(beyaz_id);
         CREATE INDEX IF NOT EXISTS maclar_siyah ON maclar(siyah_id);
     """)
+    # Eski veritabanlarına sonradan eklenen sütunlar
+    sutunlar = {r['name'] for r in con.execute("PRAGMA table_info(kullanicilar)")}
+    if 'son_giris' not in sutunlar:
+        con.execute("ALTER TABLE kullanicilar ADD COLUMN son_giris REAL")
 
 
 class _Islem:
@@ -161,6 +171,7 @@ def temizlik():
             con.execute("DELETE FROM baglantilar WHERE oda = ?", (oda_id,))
         con.execute("DELETE FROM kuyruk WHERE son < ? AND oda IS NULL", (simdi - KUYRUK_SURESI,))
         con.execute("DELETE FROM kuyruk WHERE zaman < ?", (simdi - 3600,))
+        con.execute("DELETE FROM olaylar WHERE zaman < ?", (simdi - OLAY_OMRU,))
     with _onbellek_kilit:
         for oda_id in eski:
             _onbellek.pop(oda_id, None)
@@ -238,3 +249,60 @@ def kullanici_maclari(kid, limit=30):
         "SELECT id, beyaz_id, siyah_id, beyaz_ad, siyah_ad, sonuc, sebep, sure_ayari, tur, bot_zorluk, puanli, "
         "beyaz_degisim, siyah_degisim, tarih, length(san) - length(replace(san, ' ', '')) + 1 AS hamle "
         "FROM maclar WHERE beyaz_id = ? OR siyah_id = ? ORDER BY id DESC LIMIT ?", (kid, kid, limit))]
+
+
+# ---------------------------------------------------------------------
+# Yönetim paneli: olay kayıtları ve istatistikler
+# ---------------------------------------------------------------------
+def olay_ekle(tur, kullanici_id=None, ad=None, ziyaretci=None, cihaz=None, detay=None, con=None):
+    try:
+        (con or baglanti()).execute(
+            "INSERT INTO olaylar (zaman, tur, kullanici_id, ad, ziyaretci, cihaz, detay) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (time.time(), tur, kullanici_id, ad, ziyaretci, cihaz, detay))
+    except sqlite3.Error:
+        pass   # kayıt tutulamaması oyunu asla bozmamalı
+
+
+def ziyaret_yeni_mi(ziyaretci, sure=6 * 60 * 60):
+    """Bu ziyaretçi son `sure` saniyede kaydedilmediyse True (aynı kişinin her sayfa yenilemesi sayılmasın)."""
+    r = baglanti().execute("SELECT 1 FROM olaylar WHERE tur = 'ziyaret' AND ziyaretci = ? AND zaman > ? LIMIT 1",
+                           (ziyaretci, time.time() - sure)).fetchone()
+    return r is None
+
+
+def son_giris_yaz(kid):
+    baglanti().execute("UPDATE kullanicilar SET son_giris = ? WHERE id = ?", (time.time(), kid))
+
+
+def olaylar(limit=300, tur=None, ara=None):
+    sql, p = "SELECT * FROM olaylar WHERE 1=1", []
+    if tur:
+        sql += " AND tur = ?"; p.append(tur)
+    if ara:
+        sql += " AND (ad LIKE ? OR detay LIKE ?)"; p += [f"%{ara}%", f"%{ara}%"]
+    sql += " ORDER BY id DESC LIMIT ?"; p.append(limit)
+    return [dict(r) for r in baglanti().execute(sql, p)]
+
+
+def kullanicilar_listesi():
+    return [dict(r) for r in baglanti().execute(
+        "SELECT id, ad, elo, oyun, galibiyet, maglubiyet, beraberlik, olusturma, son_giris FROM kullanicilar "
+        "ORDER BY COALESCE(son_giris, olusturma) DESC")]
+
+
+def istatistikler():
+    con = baglanti()
+    simdi = time.time()
+    gun = simdi - 24 * 3600
+    say = lambda sql, *p: con.execute(sql, p).fetchone()[0]
+    return {
+        'uye': say("SELECT COUNT(*) FROM kullanicilar"),
+        'yeni_uye_24s': say("SELECT COUNT(*) FROM kullanicilar WHERE olusturma > ?", gun),
+        'ziyaretci_24s': say("SELECT COUNT(DISTINCT ziyaretci) FROM olaylar WHERE tur = 'ziyaret' AND zaman > ?", gun),
+        'ziyaretci_7g': say("SELECT COUNT(DISTINCT ziyaretci) FROM olaylar WHERE tur = 'ziyaret' AND zaman > ?", simdi - 7 * 86400),
+        'oyun_24s': say("SELECT COUNT(*) FROM olaylar WHERE tur = 'oyun_basladi' AND zaman > ?", gun),
+        'mac_toplam': say("SELECT COUNT(*) FROM maclar"),
+        'cevrimici': say("SELECT COUNT(*) FROM baglantilar WHERE son > ?", simdi - BAGLANTI_SURESI),
+        'aktif_oda': say("SELECT COUNT(DISTINCT oda) FROM baglantilar WHERE son > ?", simdi - BAGLANTI_SURESI),
+        'kuyrukta': say("SELECT COUNT(*) FROM kuyruk WHERE oda IS NULL AND son > ?", simdi - KUYRUK_SURESI),
+    }
