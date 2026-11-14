@@ -7,6 +7,7 @@ Dosyalar:
     depo.py      SQLite veri katmanı
     index.html   arayüz
 """
+import hashlib
 import json
 import os
 import queue
@@ -16,7 +17,7 @@ import secrets
 import threading
 import time
 
-from flask import Flask, jsonify, request, send_file, session
+from flask import Flask, jsonify, redirect, request, send_file, session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 try:                                   # WebSocket desteği isteğe bağlı (pip install flask-sock)
@@ -26,6 +27,7 @@ except ImportError:
 
 import bot
 import depo
+import eposta
 import kurallar as K
 import oyun
 
@@ -59,6 +61,9 @@ depo.kur()
 BOT_BEKLEME = 0.5          # bot hamlesinden önce kısa "düşünme" arası
 ILK_HAMLE_SURESI = 45      # lobi oyununda ilk hamle bu sürede yapılmazsa oyun iptal
 AD_DESENI = re.compile(r'^[A-Za-z0-9_çğıöşüÇĞİÖŞÜ]{3,20}$')
+EPOSTA_DESENI = re.compile(r'^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$')
+SIFIRLAMA_OMRU = 30 * 60          # şifre sıfırlama bağlantısı 30 dakika geçerli
+DOGRULAMA_OMRU = 24 * 60 * 60     # e-posta doğrulama bağlantısı 24 saat geçerli
 
 
 def hata(mesaj, kod=200, **ek):
@@ -83,7 +88,58 @@ def oda_id():
 
 def aktif_kullanici():
     kid = session.get('kid')
-    return depo.kullanici_id_ile(kid) if kid else None
+    k = depo.kullanici_id_ile(kid) if kid else None
+    # Şifre değişince eski oturumlar geçersiz olur
+    if k and session.get('os', 0) != (k.get('oturum_surum') or 0):
+        session.clear()
+        return None
+    return k
+
+
+def oturum_ac(k):
+    session.clear()
+    session.permanent = True
+    session['kid'] = k['id']
+    session['os'] = k.get('oturum_surum') or 0
+
+
+def sifre_sorunu(ad, sifre):
+    """Yeni şifre için kural ihlali varsa açıklamasını döndürür."""
+    if len(sifre) < 8:
+        return 'Şifre en az 8 karakter olmalı.'
+    if len(sifre) > 128:
+        return 'Şifre çok uzun.'
+    if ad and ad.lower() in sifre.lower():
+        return 'Şifre kullanıcı adını içermemeli.'
+    if sifre.isdigit():
+        return 'Şifre sadece rakamlardan oluşmamalı.'
+    return None
+
+
+_sinirlar = {}
+_sinir_kilit = threading.Lock()
+
+
+def cok_sik_mi(anahtar, adet, sure):
+    """Son `sure` saniyede bu anahtarla `adet`ten fazla deneme olduysa True (ve denemeyi sayar)."""
+    simdi = time.time()
+    with _sinir_kilit:
+        liste = [t for t in _sinirlar.get(anahtar, []) if simdi - t < sure]
+        if len(liste) >= adet:
+            _sinirlar[anahtar] = liste
+            return True
+        liste.append(simdi)
+        _sinirlar[anahtar] = liste
+        return False
+
+
+def jeton_uret():
+    jeton = secrets.token_urlsafe(32)
+    return jeton, hashlib.sha256(jeton.encode()).hexdigest()
+
+
+def jeton_ozeti(jeton):
+    return hashlib.sha256(str(jeton or '').encode()).hexdigest()
 
 
 def misafir_adi():
@@ -172,16 +228,22 @@ def _kullanici_ozeti(k):
                                'maglubiyet': k['maglubiyet'], 'beraberlik': k['beraberlik']}
 
 
+def _kendi_ozetim(k):
+    """Kullanıcının kendisine gösterilen bilgiler (e-posta dahil)."""
+    ozet = _kullanici_ozeti(k)
+    if ozet:
+        ozet['yonetici'] = yonetici_mi(k)
+        ozet['eposta'] = k.get('eposta') if k.get('eposta_dogrulandi') else None
+    return ozet
+
+
 @app.route('/api/ben')
 def api_ben():
     k = aktif_kullanici()
     z = (request.args.get('z') or '')[:40]
     if z and depo.ziyaret_yeni_mi(z):
         olay('ziyaret', 'üye' if k else 'misafir', kullanici=k)
-    ozet = _kullanici_ozeti(k)
-    if ozet:
-        ozet['yonetici'] = yonetici_mi(k)
-    return tamam(kullanici=ozet)
+    return tamam(kullanici=_kendi_ozetim(k), eposta_hazir=eposta.hazir_mi())
 
 
 @app.route('/api/kayit', methods=['POST'])
@@ -190,20 +252,23 @@ def api_kayit():
     sifre = veri().get('sifre') or ''
     if not AD_DESENI.match(ad):
         return hata('Kullanıcı adı 3-20 karakter olmalı; harf, rakam ve _ kullanılabilir.')
-    if len(sifre) < 6:
-        return hata('Şifre en az 6 karakter olmalı.')
+    sorun = sifre_sorunu(ad, sifre)
+    if sorun:
+        return hata(sorun)
+    adres = (veri().get('eposta') or '').strip()
+    if adres and not EPOSTA_DESENI.match(adres):
+        return hata('E-posta adresi geçersiz görünüyor.')
+    if cok_sik_mi(('kayit', request.remote_addr), 10, 3600):
+        return hata('Çok fazla kayıt denemesi. Biraz sonra tekrar dene.')
     kid = depo.kullanici_ekle(ad, generate_password_hash(sifre))
     if not kid:
         return hata('Bu kullanıcı adı alınmış.')
-    session.clear()
-    session.permanent = True
-    session['kid'] = kid
     yeni = depo.kullanici_id_ile(kid)
+    oturum_ac(yeni)
     depo.son_giris_yaz(kid)
-    olay('kayit', 'yeni hesap', kullanici=yeni)
-    ozet = _kullanici_ozeti(yeni)
-    ozet['yonetici'] = yonetici_mi(yeni)
-    return tamam(kullanici=ozet)
+    olay('kayit', 'yeni hesap' + (' · e-posta eklendi' if adres else ''), kullanici=yeni)
+    gonderildi = _dogrulama_gonder(yeni, adres) if adres else None
+    return tamam(kullanici=_kendi_ozetim(yeni), dogrulama_gonderildi=gonderildi)
 
 
 @app.route('/api/giris', methods=['POST'])
@@ -223,14 +288,10 @@ def api_giris():
             _basarisiz_girisler.setdefault(anahtar, []).append(simdi)
         olay('giris_hatali', 'hesap yok' if not k else 'yanlış şifre', kullanici=False, ad=ad[:20])
         return hata('Kullanıcı adı veya şifre hatalı.')
-    session.clear()
-    session.permanent = True
-    session['kid'] = k['id']
+    oturum_ac(k)
     depo.son_giris_yaz(k['id'])
     olay('giris', None, kullanici=k)
-    ozet = _kullanici_ozeti(k)
-    ozet['yonetici'] = yonetici_mi(k)
-    return tamam(kullanici=ozet)
+    return tamam(kullanici=_kendi_ozetim(k))
 
 
 @app.route('/api/cikis', methods=['POST'])
@@ -238,6 +299,122 @@ def api_cikis():
     olay('cikis')
     session.clear()
     return tamam()
+
+
+def _dogrulama_gonder(k, adres):
+    jeton, ozet = jeton_uret()
+    depo.jeton_ekle(ozet, k['id'], 'eposta', adres, DOGRULAMA_OMRU)
+    link = request.host_url.rstrip('/') + '/dogrula?t=' + jeton
+    return eposta.gonder(adres, 'Goaltech Chess: e-posta adresini doğrula',
+                         f"Merhaba {k['ad']},\nBu e-posta adresini Goaltech Chess hesabına eklemek için aşağıdaki bağlantıya tıkla. "
+                         "Bağlantı 24 saat geçerlidir.\nBu isteği sen yapmadıysan bu e-postayı yok sayabilirsin.",
+                         baglanti=link, dugme='E-postamı doğrula')
+
+
+@app.route('/api/sifre_degistir', methods=['POST'])
+def api_sifre_degistir():
+    k = aktif_kullanici()
+    if not k:
+        return hata('Önce giriş yapmalısın.', 401)
+    eski, yeni = veri().get('eski') or '', veri().get('yeni') or ''
+    if cok_sik_mi(('sifre_degistir', k['id']), 8, 600):
+        return hata('Çok fazla deneme. 10 dakika sonra tekrar dene.')
+    if not check_password_hash(k['sifre_hash'], eski):
+        return hata('Mevcut şifren hatalı.')
+    sorun = sifre_sorunu(k['ad'], yeni)
+    if sorun:
+        return hata(sorun)
+    depo.sifre_yaz(k['id'], generate_password_hash(yeni))
+    oturum_ac(depo.kullanici_id_ile(k['id']))      # bu cihazda açık kal, diğerleri kapanır
+    olay('sifre_degisti', 'kullanıcı değiştirdi', kullanici=k)
+    return tamam()
+
+
+@app.route('/api/eposta', methods=['POST'])
+def api_eposta():
+    k = aktif_kullanici()
+    if not k:
+        return hata('Önce giriş yapmalısın.', 401)
+    adres = (veri().get('eposta') or '').strip()
+    if not EPOSTA_DESENI.match(adres):
+        return hata('E-posta adresi geçersiz görünüyor.')
+    if not eposta.hazir_mi():
+        return hata('E-posta gönderimi henüz ayarlanmadı. Site yöneticisine haber ver.')
+    if cok_sik_mi(('eposta', k['id']), 5, 3600):
+        return hata('Çok fazla deneme. Bir saat sonra tekrar dene.')
+    sahibi = depo.kullanici_eposta_ile(adres)
+    if sahibi and sahibi['id'] != k['id']:
+        return hata('Bu e-posta başka bir hesapta kullanılıyor.')
+    if not _dogrulama_gonder(k, adres):
+        return hata('E-posta gönderilemedi. Biraz sonra tekrar dene.')
+    olay('eposta_gonderildi', 'doğrulama', kullanici=k)
+    return tamam()
+
+
+@app.route('/dogrula')
+def dogrula():
+    satir = depo.jeton_kullan(jeton_ozeti(request.args.get('t')), 'eposta')
+    if not satir:
+        return redirect('/?bildirim=dogrulama_gecersiz')
+    if not depo.eposta_dogrula(satir['kullanici_id'], satir['eposta']):
+        return redirect('/?bildirim=eposta_kullanimda')
+    k = depo.kullanici_id_ile(satir['kullanici_id'])
+    depo.olay_ekle('eposta_dogrulandi', kullanici_id=k['id'], ad=k['ad'], cihaz=cihaz_bilgisi())
+    return redirect('/?bildirim=eposta_dogrulandi')
+
+
+@app.route('/api/sifremi_unuttum', methods=['POST'])
+def api_sifremi_unuttum():
+    giris = (veri().get('ad') or '').strip()[:100]
+    genel = tamam(mesaj='Bu bilgiyle eşleşen ve e-postası doğrulanmış bir hesap varsa, şifre sıfırlama bağlantısı '
+                        'e-postasına gönderildi. Gelen kutunu (ve gereksiz klasörünü) kontrol et.')
+    if not giris:
+        return hata('Kullanıcı adını ya da e-postanı yaz.')
+    if not eposta.hazir_mi():
+        return hata('E-posta gönderimi henüz ayarlanmadı. Şifreni sıfırlatmak için site yöneticisine yaz.')
+    if cok_sik_mi(('unuttum_ip', request.remote_addr), 10, 3600):
+        return hata('Çok fazla istek. Bir saat sonra tekrar dene.')
+    k = depo.kullanici_eposta_ile(giris) if '@' in giris else depo.kullanici_ad_ile(giris)
+    olay('sifre_sifirlama_istendi', 'hesap bulunamadı' if not k else
+         ('e-posta yok' if not k.get('eposta_dogrulandi') else 'bağlantı gönderildi'), kullanici=False,
+         ad=(k['ad'] if k else giris[:20]))
+    # Hesap olsun olmasın aynı cevap: dışarıdan hangi hesapların var olduğu anlaşılmasın
+    if not k or not k.get('eposta_dogrulandi') or cok_sik_mi(('unuttum', k['id']), 3, 3600):
+        return genel
+    jeton, ozet = jeton_uret()
+    depo.jeton_ekle(ozet, k['id'], 'sifre', k['eposta'], SIFIRLAMA_OMRU)
+    link = request.host_url.rstrip('/') + '/?sifirla=' + jeton
+    eposta.gonder(k['eposta'], 'Goaltech Chess: şifre sıfırlama',
+                  f"Merhaba {k['ad']},\nŞifreni sıfırlamak için aşağıdaki bağlantıya tıkla. Bağlantı 30 dakika geçerlidir "
+                  "ve sadece bir kez kullanılabilir.\nBu isteği sen yapmadıysan bu e-postayı yok say; şifren değişmez.",
+                  baglanti=link, dugme='Yeni şifre belirle')
+    return genel
+
+
+@app.route('/api/sifre_sifirla', methods=['POST'])
+def api_sifre_sifirla():
+    ozet = jeton_ozeti(veri().get('jeton'))
+    if veri().get('kontrol'):
+        return tamam(gecerli=depo.jeton_gecerli_mi(ozet, 'sifre'))
+    if cok_sik_mi(('sifirla_ip', request.remote_addr), 20, 3600):
+        return hata('Çok fazla deneme. Biraz sonra tekrar dene.')
+    yeni = veri().get('yeni') or ''
+    if not depo.jeton_gecerli_mi(ozet, 'sifre'):
+        return hata('Bu bağlantının süresi dolmuş ya da daha önce kullanılmış. Yeniden şifre sıfırlama iste.')
+    satir_k = depo.baglanti().execute("SELECT kullanici_id FROM jetonlar WHERE ozet = ?", (ozet,)).fetchone()
+    k = depo.kullanici_id_ile(satir_k['kullanici_id']) if satir_k else None
+    sorun = sifre_sorunu(k['ad'] if k else '', yeni)
+    if sorun:
+        return hata(sorun)
+    satir = depo.jeton_kullan(ozet, 'sifre')
+    if not satir or not k:
+        return hata('Bu bağlantının süresi dolmuş ya da daha önce kullanılmış.')
+    depo.sifre_yaz(k['id'], generate_password_hash(yeni))
+    k = depo.kullanici_id_ile(k['id'])
+    oturum_ac(k)
+    depo.son_giris_yaz(k['id'])
+    olay('sifre_sifirlandi', 'e-posta bağlantısıyla', kullanici=k)
+    return tamam(kullanici=_kendi_ozetim(k))
 
 
 @app.route('/api/liderlik')
@@ -804,6 +981,21 @@ def yonetim_sayfasi():
     return yanit
 
 
+@app.route('/api/yonetim/gecici_sifre', methods=['POST'])
+def api_gecici_sifre():
+    y = aktif_kullanici()
+    if not yonetici_mi(y):
+        return hata('Bu işlem sadece yöneticilere açık.', 403)
+    k = depo.kullanici_ad_ile((veri().get('ad') or '').strip())
+    if not k:
+        return hata('Kullanıcı bulunamadı.')
+    harfler = 'abcdefghjkmnpqrstuvwxyz23456789'
+    gecici = ''.join(secrets.choice(harfler) for _ in range(10))
+    depo.sifre_yaz(k['id'], generate_password_hash(gecici))
+    olay('gecici_sifre', f"{k['ad']} için geçici şifre üretildi", kullanici=y)
+    return tamam(sifre=gecici, ad=k['ad'])
+
+
 @app.route('/api/yonetim')
 def api_yonetim():
     k = aktif_kullanici()
@@ -820,7 +1012,7 @@ def api_yonetim():
         "(SELECT COUNT(*) FROM baglantilar b WHERE b.oda = o.id AND b.son > ?) AS bagli "
         "FROM odalar o WHERE o.id IN (SELECT oda FROM baglantilar WHERE son > ?) ORDER BY o.guncelleme DESC LIMIT 50",
         (sinir, sinir))]
-    return tamam(istatistik=depo.istatistikler(), olaylar=depo.olaylar(400, tur, ara),
+    return tamam(istatistik=depo.istatistikler(), olaylar=depo.olaylar(400, tur, ara), eposta_hazir=eposta.hazir_mi(),
                  kullanicilar=depo.kullanicilar_listesi(), canli=canli)
 
 

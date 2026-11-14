@@ -120,6 +120,11 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
 .tc-aciklama { margin-top: 10px; font-size: 13px; color: var(--muted); text-align: left; line-height: 1.45; background: rgba(129,182,76,.08);
                border: 1px solid rgba(129,182,76,.25); border-radius: 10px; padding: 8px 10px; }
 .tc-aciklama b { color: var(--text); }
+.ipucu { font-size: 12px; color: var(--muted); margin-top: 5px; }
+.link { color: var(--green); font-size: 14px; }
+.bolum { margin: 6px 0 10px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.bolum ~ .bolum { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ok-msg { color: var(--green); } .err-msg { color: #f19999; }
 .gizlilik { color: var(--muted); font-size: 12px; text-align: center; margin-top: 4px; }
 .name-row { margin-bottom: 16px; }
 .lists { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
@@ -251,6 +256,7 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
 </div>
 <div class="menu-pop hidden" id="user-menu">
     <button onclick="profilAc()">👤 Profilim</button>
+    <button onclick="ayarlarAc()">⚙️ Hesap Ayarları</button>
     <button id="menu-yonetim" class="hidden" onclick="location.href='/yonetim'">🛠 Yönetim Paneli</button>
     <button onclick="liderlikAc()">🏆 Liderlik Tablosu</button>
     <button onclick="cikisYap()">🚪 Çıkış Yap</button>
@@ -383,8 +389,50 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
     <label class="lbl" for="auth-ad">Kullanıcı Adı</label><input type="text" id="auth-ad" maxlength="20" autocomplete="username">
     <div style="height:10px"></div>
     <label class="lbl" for="auth-sifre">Şifre</label><input type="password" id="auth-sifre" autocomplete="current-password" onkeydown="if(event.key==='Enter') authGonder()">
+    <div id="auth-kayit-ek">
+        <div class="ipucu">En az 8 karakter; kullanıcı adını içermesin.</div>
+        <div id="auth-eposta-alani"><div style="height:10px"></div>
+        <label class="lbl" for="auth-eposta">E-posta <span style="text-transform:none">(isteğe bağlı · şifreni unutursan sıfırlamak için)</span></label>
+        <input type="text" id="auth-eposta" inputmode="email" autocomplete="email" placeholder="ornek@gmail.com"></div>
+    </div>
     <div id="auth-err" style="color:#f19999;font-size:13px;min-height:18px;margin:8px 0"></div>
     <button class="btn-big" id="auth-submit" onclick="authGonder()">GİRİŞ YAP</button>
+    <div class="center" id="auth-unuttum" style="margin-top:14px"><a href="#" class="link" onclick="unuttumAc();return false">Şifremi unuttum</a></div>
+</div></div>
+
+<div class="modal" id="m-unuttum"><div class="modal-box">
+    <div class="modal-head"><h3>🔑 Şifremi Unuttum</h3><button class="x" onclick="kapat('m-unuttum')">×</button></div>
+    <p class="muted" style="margin-top:0;font-size:14px">Kullanıcı adını ya da hesabına eklediğin e-postayı yaz. E-postana şifre sıfırlama bağlantısı gönderelim.</p>
+    <input type="text" id="unuttum-ad" placeholder="Kullanıcı adı veya e-posta" onkeydown="if(event.key==='Enter') unuttumGonder()">
+    <div id="unuttum-msg" style="font-size:13px;min-height:18px;margin:10px 0"></div>
+    <button class="btn-big" id="unuttum-btn" onclick="unuttumGonder()">BAĞLANTI GÖNDER</button>
+    <p class="muted" style="font-size:12px;margin-bottom:0">Hesabına e-posta eklemediysen, şifreni sıfırlatmak için site yöneticisine yaz.</p>
+</div></div>
+
+<div class="modal" id="m-sifirla"><div class="modal-box">
+    <div class="modal-head"><h3>🔒 Yeni Şifre Belirle</h3><button class="x" onclick="kapat('m-sifirla')">×</button></div>
+    <label class="lbl" for="sifirla-1">Yeni şifre</label><input type="password" id="sifirla-1" autocomplete="new-password">
+    <div class="ipucu">En az 8 karakter; kullanıcı adını içermesin.</div><div style="height:10px"></div>
+    <label class="lbl" for="sifirla-2">Yeni şifre (tekrar)</label><input type="password" id="sifirla-2" autocomplete="new-password" onkeydown="if(event.key==='Enter') sifirlaGonder()">
+    <div id="sifirla-msg" style="color:#f19999;font-size:13px;min-height:18px;margin:10px 0"></div>
+    <button class="btn-big" onclick="sifirlaGonder()">ŞİFREMİ DEĞİŞTİR</button>
+</div></div>
+
+<div class="modal" id="m-ayarlar"><div class="modal-box">
+    <div class="modal-head"><h3>⚙️ Hesap Ayarları</h3><button class="x" onclick="kapat('m-ayarlar')">×</button></div>
+    <h4 class="bolum">📧 E-posta</h4>
+    <div id="ayar-eposta-durum" class="muted" style="font-size:14px;margin-bottom:10px"></div>
+    <div class="chat-row"><input type="text" id="ayar-eposta" inputmode="email" placeholder="ornek@gmail.com"><button class="btn green" id="ayar-eposta-btn" onclick="epostaGonder()">Doğrula</button></div>
+    <div id="ayar-eposta-msg" style="font-size:13px;min-height:18px;margin:8px 0"></div>
+    <h4 class="bolum">🔒 Şifre Değiştir</h4>
+    <label class="lbl" for="ayar-eski">Mevcut şifre</label><input type="password" id="ayar-eski" autocomplete="current-password">
+    <div style="height:10px"></div>
+    <label class="lbl" for="ayar-yeni">Yeni şifre</label><input type="password" id="ayar-yeni" autocomplete="new-password">
+    <div class="ipucu">En az 8 karakter; kullanıcı adını içermesin.</div><div style="height:10px"></div>
+    <label class="lbl" for="ayar-yeni2">Yeni şifre (tekrar)</label><input type="password" id="ayar-yeni2" autocomplete="new-password" onkeydown="if(event.key==='Enter') sifreDegistir()">
+    <div id="ayar-sifre-msg" style="font-size:13px;min-height:18px;margin:8px 0"></div>
+    <button class="btn-big" onclick="sifreDegistir()">ŞİFREYİ DEĞİŞTİR</button>
+    <p class="muted" style="font-size:12px;margin-bottom:0">Şifreni değiştirince diğer cihazlardaki oturumların kapanır.</p>
 </div></div>
 
 <div class="modal" id="m-leader"><div class="modal-box wide">
@@ -524,8 +572,9 @@ $('sound-btn').innerText = sesAcik ? '🔊' : '🔇';
 // Hesap
 // =====================================================================
 let ben = null;
+let epostaHazir = false;
 async function hesapYukle() {
-    try { const r = await api('/api/ben'); ben = r.kullanici; } catch (e) { ben = null; }
+    try { const r = await api('/api/ben'); ben = r.kullanici; epostaHazir = !!r.eposta_hazir; } catch (e) { ben = null; }
     hesapCiz();
 }
 function hesapCiz() {
@@ -545,13 +594,63 @@ function authSekme(mod) {
     authMod = mod;
     $('tab-giris').classList.toggle('active', mod === 'giris'); $('tab-kayit').classList.toggle('active', mod === 'kayit');
     $('auth-submit').innerText = mod === 'giris' ? 'GİRİŞ YAP' : 'KAYIT OL';
+    $('auth-kayit-ek').style.display = mod === 'kayit' ? '' : 'none';
+    $('auth-eposta-alani').style.display = epostaHazir ? '' : 'none';
+    $('auth-unuttum').style.display = mod === 'giris' ? '' : 'none';
     $('auth-sifre').autocomplete = mod === 'giris' ? 'current-password' : 'new-password';
 }
 async function authGonder() {
-    const r = await api('/api/' + authMod, { ad: $('auth-ad').value.trim(), sifre: $('auth-sifre').value });
+    const govde = { ad: $('auth-ad').value.trim(), sifre: $('auth-sifre').value };
+    if (authMod === 'kayit' && epostaHazir) govde.eposta = $('auth-eposta').value.trim();
+    const r = await api('/api/' + authMod, govde);
     if (!r.success) { $('auth-err').innerText = r.error; return; }
     ben = r.kullanici; $('auth-sifre').value = ''; kapat('m-auth'); hesapCiz();
-    bildir(authMod === 'giris' ? 'Hoş geldin, ' + ben.ad + '!' : 'Hesabın oluşturuldu 🎉');
+    if (authMod === 'giris') bildir('Hoş geldin, ' + ben.ad + '!');
+    else if (r.dogrulama_gonderildi) bildir('Hesabın oluşturuldu 🎉 E-postana gelen bağlantıya tıklayıp adresini doğrula.');
+    else bildir('Hesabın oluşturuldu 🎉');
+}
+
+function mesaj(id, metin, iyi) { const e = $(id); e.innerText = metin || ''; e.className = iyi ? 'ok-msg' : 'err-msg'; }
+
+function unuttumAc() { kapat('m-auth'); $('unuttum-ad').value = $('auth-ad').value; mesaj('unuttum-msg', ''); ac('m-unuttum'); setTimeout(() => $('unuttum-ad').focus(), 50); }
+async function unuttumGonder() {
+    $('unuttum-btn').disabled = true;
+    try {
+        const r = await api('/api/sifremi_unuttum', { ad: $('unuttum-ad').value.trim() });
+        mesaj('unuttum-msg', r.success ? r.mesaj : r.error, r.success);
+    } finally { $('unuttum-btn').disabled = false; }
+}
+
+let sifirlamaJetonu = null;
+async function sifirlaGonder() {
+    const a = $('sifirla-1').value, b = $('sifirla-2').value;
+    if (a !== b) { mesaj('sifirla-msg', 'İki şifre aynı değil.'); return; }
+    const r = await api('/api/sifre_sifirla', { jeton: sifirlamaJetonu, yeni: a });
+    if (!r.success) { mesaj('sifirla-msg', r.error); return; }
+    ben = r.kullanici; hesapCiz(); kapat('m-sifirla'); $('sifirla-1').value = $('sifirla-2').value = '';
+    bildir('Şifren değişti, giriş yapıldı ✅');
+}
+
+function ayarlarAc() {
+    if (!ben) return;
+    $('ayar-eposta-durum').innerHTML = !epostaHazir ? 'E-posta gönderimi henüz ayarlanmadı.' :
+        ben.eposta ? `Kayıtlı ve doğrulanmış: <b style="color:var(--text)">${esc(ben.eposta)}</b>. Değiştirmek için yeni adresi yaz.`
+                   : 'Hesabında e-posta yok. Şifreni unutursan sıfırlayabilmek için ekle.';
+    $('ayar-eposta').disabled = $('ayar-eposta-btn').disabled = !epostaHazir;
+    ['ayar-eposta-msg', 'ayar-sifre-msg'].forEach(i => mesaj(i, ''));
+    ac('m-ayarlar');
+}
+async function epostaGonder() {
+    const r = await api('/api/eposta', { eposta: $('ayar-eposta').value.trim() });
+    mesaj('ayar-eposta-msg', r.success ? 'Doğrulama bağlantısı gönderildi. E-postandaki bağlantıya tıkla (24 saat geçerli).' : r.error, r.success);
+}
+async function sifreDegistir() {
+    const eski = $('ayar-eski').value, yeni = $('ayar-yeni').value;
+    if (yeni !== $('ayar-yeni2').value) { mesaj('ayar-sifre-msg', 'Yeni şifreler aynı değil.'); return; }
+    const r = await api('/api/sifre_degistir', { eski, yeni });
+    if (!r.success) { mesaj('ayar-sifre-msg', r.error); return; }
+    ['ayar-eski', 'ayar-yeni', 'ayar-yeni2'].forEach(i => $(i).value = '');
+    mesaj('ayar-sifre-msg', 'Şifren değişti ✅', true);
 }
 async function cikisYap() { await api('/api/cikis', {}); ben = null; hesapCiz(); bildir('Çıkış yapıldı'); }
 function oyuncuAdi() {
@@ -1123,6 +1222,26 @@ document.addEventListener('keydown', e => {
 // =====================================================================
 (async function baslat() {
     await hesapYukle();
+    const q = new URLSearchParams(location.search);
+    const bildirimler = {
+        eposta_dogrulandi: ['E-posta adresin doğrulandı ✅', false],
+        dogrulama_gecersiz: ['Doğrulama bağlantısının süresi dolmuş ya da kullanılmış.', true],
+        eposta_kullanimda: ['Bu e-posta başka bir hesapta doğrulanmış.', true]
+    };
+    if (q.get('bildirim') && bildirimler[q.get('bildirim')]) {
+        setTimeout(() => bildir(...bildirimler[q.get('bildirim')]), 400);
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}
+        await hesapYukle();
+    }
+    if (q.get('sifirla')) {
+        sifirlamaJetonu = q.get('sifirla');
+        try { history.replaceState(null, '', location.pathname); } catch (e) {}   // jeton adres çubuğunda kalmasın
+        const k = await api('/api/sifre_sifirla', { jeton: sifirlamaJetonu, kontrol: true });
+        menuGoster();
+        if (k.gecerli) { mesaj('sifirla-msg', ''); ac('m-sifirla'); }
+        else bildir('Bu şifre sıfırlama bağlantısının süresi dolmuş ya da kullanılmış. Yeniden iste.', true);
+        return;
+    }
     const p = new URLSearchParams(location.search).get('oda');
     if (!p) { menuGoster(); return; }
     if (new URLSearchParams(location.search).get('izle')) { odayaGir(p, true); return; }

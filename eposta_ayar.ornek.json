@@ -1,0 +1,7 @@
+{
+    "sunucu": "smtp.gmail.com",
+    "port": 587,
+    "kullanici": "oyunun.gmail.adresi@gmail.com",
+    "sifre": "BURAYA_GOOGLE_UYGULAMA_SIFRESI",
+    "gonderen": "Goaltech Chess"
+}

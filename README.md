@@ -24,6 +24,8 @@ arkadaşla davet linkiyle oyun, izleyici modu, sohbet ve maç tekrarı.
 | `bot.py` | Yapay zeka |
 | `oyun.py` | Oyun akışı ve satranç saati |
 | `depo.py` | SQLite veritabanı |
+| `eposta.py` | E-posta gönderimi |
+| `yonetim.html` | Yönetim paneli |
 | `index.html` | Arayüz |
 | `tests/` | Otomatik testler |
 
@@ -44,7 +46,7 @@ python -m unittest discover -s tests -v
 
 ## PythonAnywhere'de yayınlama
 
-1. `app.py`, `kurallar.py`, `bot.py`, `oyun.py`, `depo.py` ve `index.html` dosyalarını **aynı klasöre** yükleyin.
+1. `app.py`, `kurallar.py`, `bot.py`, `oyun.py`, `depo.py`, `eposta.py`, `index.html` ve `yonetim.html` dosyalarını **aynı klasöre** yükleyin.
 2. **Web** sekmesindeki WSGI dosyasında uygulamanın `from app import app as application` şeklinde yüklendiğinden emin olun.
 3. **Reload** düğmesine basın.
 
@@ -59,11 +61,31 @@ ve oturum anahtarı (`.gizli_anahtar`) ilk çalıştırmada aynı klasörde otom
 - Veritabanını kalıcı bir diske koyun: `GOALTECH_DB=/kalici/disk/goaltech_chess.db`
 - `GOALTECH_SECRET` ortam değişkenine uzun, rastgele bir değer verin.
 
+## Yönetim paneli
+
+`/yonetim` adresi, `yoneticiler.txt` dosyasında (her satıra bir kullanıcı adı) ya da `GOALTECH_YONETICILER`
+ortam değişkeninde (virgülle ayrılmış) adı geçen hesaplara açıktır. Ziyaret, kayıt, giriş, oyun ve şifre
+olaylarını; üyeleri ve şu an açık odaları gösterir. IP adresi saklanmaz, kayıtlar 90 gün sonra silinir.
+Şifresini unutan ve e-postası olmayan kullanıcıya panelden geçici şifre verilebilir.
+
+## E-posta (şifre sıfırlama ve e-posta doğrulama)
+
+`eposta_ayar.ornek.json` dosyasını `eposta_ayar.json` adıyla kopyalayıp doldurun (bu dosya gizlidir, git'e eklenmez).
+Gmail için:
+
+1. Oyun için kullanılacak Gmail hesabında **2 adımlı doğrulamayı** açın.
+2. https://myaccount.google.com/apppasswords adresinden bir **uygulama şifresi** oluşturun.
+3. `kullanici` alanına Gmail adresini, `sifre` alanına bu 16 haneli uygulama şifresini yazın.
+
+E-posta ayarlanmadıysa oyun çalışmaya devam eder; sadece e-posta doğrulama ve "Şifremi unuttum" kapalı olur.
+
 ## Ortam değişkenleri
 
 | Değişken | Açıklama |
 |---|---|
 | `GOALTECH_DB` | Veritabanı dosyasının yolu (varsayılan: uygulama klasörü) |
 | `GOALTECH_SECRET` | Oturum çerezlerini imzalayan gizli anahtar (yoksa dosyada üretilir) |
+| `GOALTECH_YONETICILER` | Yönetim paneline erişebilen kullanıcı adları (virgülle) |
+| `GOALTECH_SMTP_SUNUCU`, `_PORT`, `_KULLANICI`, `_SIFRE`, `_GONDEREN` | E-posta ayarları (`eposta_ayar.json` yerine) |
 | `GOALTECH_WAL` | `1` ise SQLite WAL modu (yerel diskte daha hızlı; ağ diskinde kullanmayın) |
 | `PORT` | Sunucu portu (`python app.py` için) |

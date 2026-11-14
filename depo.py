@@ -77,8 +77,18 @@ def kur():
     """)
     # Eski veritabanlarına sonradan eklenen sütunlar
     sutunlar = {r['name'] for r in con.execute("PRAGMA table_info(kullanicilar)")}
-    if 'son_giris' not in sutunlar:
-        con.execute("ALTER TABLE kullanicilar ADD COLUMN son_giris REAL")
+    for sutun, tanim in (('son_giris', 'REAL'), ('eposta', 'TEXT'), ('eposta_dogrulandi', 'INTEGER DEFAULT 0'),
+                         ('oturum_surum', 'INTEGER DEFAULT 0')):
+        if sutun not in sutunlar:
+            con.execute(f"ALTER TABLE kullanicilar ADD COLUMN {sutun} {tanim}")
+    con.executescript("""
+        CREATE UNIQUE INDEX IF NOT EXISTS kullanicilar_eposta ON kullanicilar(eposta COLLATE NOCASE)
+            WHERE eposta_dogrulandi = 1;
+        CREATE TABLE IF NOT EXISTS jetonlar (
+            ozet TEXT PRIMARY KEY, kullanici_id INTEGER NOT NULL, amac TEXT NOT NULL, eposta TEXT,
+            son REAL NOT NULL, kullanildi INTEGER DEFAULT 0, olusturma REAL
+        );
+    """)
 
 
 class _Islem:
@@ -172,6 +182,7 @@ def temizlik():
         con.execute("DELETE FROM kuyruk WHERE son < ? AND oda IS NULL", (simdi - KUYRUK_SURESI,))
         con.execute("DELETE FROM kuyruk WHERE zaman < ?", (simdi - 3600,))
         con.execute("DELETE FROM olaylar WHERE zaman < ?", (simdi - OLAY_OMRU,))
+        con.execute("DELETE FROM jetonlar WHERE son < ?", (simdi - 86400,))
     with _onbellek_kilit:
         for oda_id in eski:
             _onbellek.pop(oda_id, None)
@@ -212,6 +223,54 @@ def kullanici_ekle(ad, sifre_hash):
             return cur.lastrowid
     except sqlite3.IntegrityError:
         return None
+
+
+def sifre_yaz(kid, sifre_hash):
+    """Şifreyi değiştirir ve oturum sürümünü artırır: o hesabın diğer cihazlardaki oturumları kapanır."""
+    baglanti().execute("UPDATE kullanicilar SET sifre_hash = ?, oturum_surum = COALESCE(oturum_surum, 0) + 1 WHERE id = ?",
+                       (sifre_hash, kid))
+
+
+def kullanici_eposta_ile(eposta):
+    r = baglanti().execute("SELECT * FROM kullanicilar WHERE eposta = ? COLLATE NOCASE AND eposta_dogrulandi = 1",
+                           (eposta,)).fetchone()
+    return dict(r) if r else None
+
+
+def eposta_dogrula(kid, eposta):
+    """E-postayı hesaba bağlar. Başka bir hesapta doğrulanmışsa False."""
+    try:
+        with islem() as con:
+            con.execute("UPDATE kullanicilar SET eposta = ?, eposta_dogrulandi = 1 WHERE id = ?", (eposta, kid))
+        return True
+    except sqlite3.IntegrityError:
+        return False
+
+
+def jeton_ekle(ozet, kid, amac, eposta, omur):
+    simdi = time.time()
+    con = baglanti()
+    # Aynı amaçla bekleyen eski bağlantılar geçersiz olsun
+    con.execute("UPDATE jetonlar SET kullanildi = 1 WHERE kullanici_id = ? AND amac = ? AND kullanildi = 0", (kid, amac))
+    con.execute("INSERT INTO jetonlar (ozet, kullanici_id, amac, eposta, son, olusturma) VALUES (?, ?, ?, ?, ?, ?)",
+                (ozet, kid, amac, eposta, simdi + omur, simdi))
+
+
+def jeton_kullan(ozet, amac):
+    """Geçerli, süresi dolmamış, kullanılmamış jetonu tüketir; satırı döndürür."""
+    with islem() as con:
+        r = con.execute("SELECT * FROM jetonlar WHERE ozet = ? AND amac = ? AND kullanildi = 0 AND son > ?",
+                        (ozet, amac, time.time())).fetchone()
+        if not r:
+            return None
+        con.execute("UPDATE jetonlar SET kullanildi = 1 WHERE ozet = ?", (ozet,))
+        return dict(r)
+
+
+def jeton_gecerli_mi(ozet, amac):
+    r = baglanti().execute("SELECT 1 FROM jetonlar WHERE ozet = ? AND amac = ? AND kullanildi = 0 AND son > ?",
+                           (ozet, amac, time.time())).fetchone()
+    return r is not None
 
 
 def kullanici_ad_ile(ad):
@@ -286,7 +345,8 @@ def olaylar(limit=300, tur=None, ara=None):
 
 def kullanicilar_listesi():
     return [dict(r) for r in baglanti().execute(
-        "SELECT id, ad, elo, oyun, galibiyet, maglubiyet, beraberlik, olusturma, son_giris FROM kullanicilar "
+        "SELECT id, ad, elo, oyun, galibiyet, maglubiyet, beraberlik, olusturma, son_giris, eposta_dogrulandi, "
+        "eposta IS NOT NULL AND eposta != '' AS eposta_var FROM kullanicilar "
         "ORDER BY COALESCE(son_giris, olusturma) DESC")]
 
 

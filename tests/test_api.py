@@ -96,8 +96,8 @@ class ArkadasOdasi(unittest.TestCase):
 class LobiVeElo(unittest.TestCase):
     def test_puanli_mac(self):
         a, b = Istemci('LA'), Istemci('LB')
-        self.assertTrue(a.post('/api/kayit', {'ad': 'Oyuncu1', 'sifre': 'gizli123'})['success'])
-        self.assertTrue(b.post('/api/kayit', {'ad': 'Oyuncu2', 'sifre': 'gizli123'})['success'])
+        self.assertTrue(a.post('/api/kayit', {'ad': 'Oyuncu1', 'sifre': 'gizliSifre123'})['success'])
+        self.assertTrue(b.post('/api/kayit', {'ad': 'Oyuncu2', 'sifre': 'gizliSifre123'})['success'])
         self.assertTrue(a.post('/api/lobi/ara', {'sure': '5+0'})['bekliyor'])
         e = b.post('/api/lobi/ara', {'sure': '5+0'})['eslesme']
         oda = e['oda']
@@ -116,9 +116,9 @@ class LobiVeElo(unittest.TestCase):
 
     def test_hatali_giris(self):
         c = Istemci('G')
-        c.post('/api/kayit', {'ad': 'Oyuncu3', 'sifre': 'gizli123'})
+        c.post('/api/kayit', {'ad': 'Oyuncu3', 'sifre': 'gizliSifre123'})
         self.assertFalse(Istemci('H').post('/api/giris', {'ad': 'Oyuncu3', 'sifre': 'yanlis'})['success'])
-        self.assertTrue(Istemci('H').post('/api/giris', {'ad': 'oyuncu3', 'sifre': 'gizli123'})['success'])
+        self.assertTrue(Istemci('H').post('/api/giris', {'ad': 'oyuncu3', 'sifre': 'gizliSifre123'})['success'])
 
 
 class BotOyunu(unittest.TestCase):
@@ -141,9 +141,9 @@ class YonetimPaneli(unittest.TestCase):
         os.environ['GOALTECH_YONETICILER'] = 'Patron'
         misafir, uye, patron = Istemci('Y1'), Istemci('Y2'), Istemci('Y3')
         self.assertEqual(misafir.c.get('/api/yonetim').status_code, 401)
-        uye.post('/api/kayit', {'ad': 'SiradanUye', 'sifre': 'gizli123'})
+        uye.post('/api/kayit', {'ad': 'SiradanUye', 'sifre': 'gizliSifre123'})
         self.assertEqual(uye.c.get('/api/yonetim').status_code, 403)
-        r = patron.post('/api/kayit', {'ad': 'Patron', 'sifre': 'gizli123'})
+        r = patron.post('/api/kayit', {'ad': 'Patron', 'sifre': 'gizliSifre123'})
         self.assertTrue(r['kullanici']['yonetici'])
         Istemci('Y4').post('/api/giris', {'ad': 'Patron', 'sifre': 'yanlis'})
         misafir.c.get('/api/ben?z=ziyaretci1', headers={'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Mobile Safari/604.1'})
@@ -158,6 +158,81 @@ class YonetimPaneli(unittest.TestCase):
         self.assertIn('3 dk +2 sn', bot_oyunu['detay'])
         self.assertIn('SiradanUye', [k['ad'] for k in p['kullanicilar']])
         self.assertGreaterEqual(p['istatistik']['uye'], 2)
+
+
+class SifreVeEposta(unittest.TestCase):
+    def setUp(self):
+        import eposta
+        self.giden = []
+        self._eski = (eposta.hazir_mi, eposta.gonder)
+        eposta.hazir_mi = lambda: True
+        eposta.gonder = lambda alici, konu, metin, baglanti=None, dugme=None: self.giden.append((alici, baglanti)) or True
+
+    def tearDown(self):
+        import eposta
+        eposta.hazir_mi, eposta.gonder = self._eski
+
+    def test_zayif_sifre_reddedilir(self):
+        c = Istemci('S0')
+        self.assertIn('8 karakter', c.post('/api/kayit', {'ad': 'Zayif', 'sifre': 'kisa1'})['error'])
+        self.assertIn('kullanıcı adını', c.post('/api/kayit', {'ad': 'Zayif', 'sifre': 'zayif123456'})['error'])
+        self.assertIn('rakam', c.post('/api/kayit', {'ad': 'Zayif', 'sifre': '1234567890'})['error'])
+
+    def test_sifre_degistir_diger_oturumlari_kapatir(self):
+        a, b = Istemci('S1'), Istemci('S2')
+        a.post('/api/kayit', {'ad': 'Degisken', 'sifre': 'ilkSifre123'})
+        b.post('/api/giris', {'ad': 'Degisken', 'sifre': 'ilkSifre123'})
+        self.assertEqual(b.get('/api/ben')['kullanici']['ad'], 'Degisken')
+        self.assertFalse(a.post('/api/sifre_degistir', {'eski': 'yanlis', 'yeni': 'yeniSifre456'})['success'])
+        self.assertTrue(a.post('/api/sifre_degistir', {'eski': 'ilkSifre123', 'yeni': 'yeniSifre456'})['success'])
+        self.assertEqual(a.get('/api/ben')['kullanici']['ad'], 'Degisken')     # değiştiren cihaz açık kalır
+        self.assertIsNone(b.get('/api/ben')['kullanici'])                       # diğer cihaz çıkış yapar
+        self.assertFalse(Istemci('S3').post('/api/giris', {'ad': 'Degisken', 'sifre': 'ilkSifre123'})['success'])
+        self.assertTrue(Istemci('S3').post('/api/giris', {'ad': 'Degisken', 'sifre': 'yeniSifre456'})['success'])
+
+    def test_eposta_dogrulama_ve_sifre_sifirlama(self):
+        a = Istemci('E1')
+        r = a.post('/api/kayit', {'ad': 'Unutkan', 'sifre': 'ilkSifre123', 'eposta': 'unutkan@ornek.com'})
+        self.assertTrue(r['dogrulama_gonderildi'])
+        self.assertIsNone(a.get('/api/ben')['kullanici']['eposta'])              # henüz doğrulanmadı
+        # Doğrulanmamış e-postayla sıfırlama bağlantısı gitmez (ama cevap aynıdır)
+        genel = Istemci('E2').post('/api/sifremi_unuttum', {'ad': 'Unutkan'})
+        self.assertTrue(genel['success'])
+        self.assertEqual(len(self.giden), 1)
+        dogrulama = self.giden[-1][1]
+        self.assertIn('/dogrula?t=', dogrulama)
+        yanit = a.c.get(dogrulama.split('localhost', 1)[1])
+        self.assertIn('eposta_dogrulandi', yanit.headers['Location'])
+        self.assertEqual(a.get('/api/ben')['kullanici']['eposta'], 'unutkan@ornek.com')
+        # Aynı doğrulama bağlantısı ikinci kez çalışmaz
+        self.assertIn('dogrulama_gecersiz', a.c.get(dogrulama.split('localhost', 1)[1]).headers['Location'])
+        # Var olmayan kullanıcı için de aynı cevap
+        self.assertEqual(Istemci('E3').post('/api/sifremi_unuttum', {'ad': 'BoyleBiriYok'})['mesaj'], genel['mesaj'])
+        # Şifremi unuttum: e-postayla da çalışır
+        self.assertTrue(Istemci('E4').post('/api/sifremi_unuttum', {'ad': 'UNUTKAN@ornek.com'})['success'])
+        alici, link = self.giden[-1]
+        self.assertEqual(alici, 'unutkan@ornek.com')
+        jeton = link.split('sifirla=')[1]
+        y = Istemci('E5')
+        self.assertTrue(y.post('/api/sifre_sifirla', {'jeton': jeton, 'kontrol': True})['gecerli'])
+        self.assertFalse(y.post('/api/sifre_sifirla', {'jeton': jeton, 'yeni': 'kisa'})['success'])   # zayıf, jeton harcanmaz
+        r = y.post('/api/sifre_sifirla', {'jeton': jeton, 'yeni': 'yepyeniSifre789'})
+        self.assertTrue(r['success'])
+        self.assertEqual(y.get('/api/ben')['kullanici']['ad'], 'Unutkan')
+        self.assertFalse(Istemci('E6').post('/api/sifre_sifirla', {'jeton': jeton, 'yeni': 'baskaSifre789'})['success'])
+        self.assertIsNone(a.get('/api/ben')['kullanici'])                        # eski oturum kapandı
+        self.assertTrue(Istemci('E7').post('/api/giris', {'ad': 'Unutkan', 'sifre': 'yepyeniSifre789'})['success'])
+
+    def test_yonetici_gecici_sifre(self):
+        os.environ['GOALTECH_YONETICILER'] = 'Patron2'
+        y, u = Istemci('G1'), Istemci('G2')
+        y.post('/api/kayit', {'ad': 'Patron2', 'sifre': 'patronSifre1'})
+        u.post('/api/kayit', {'ad': 'Kaybeden', 'sifre': 'eskiSifre123'})
+        self.assertEqual(u.c.post('/api/yonetim/gecici_sifre', json={'ad': 'Kaybeden'}).status_code, 403)
+        r = y.post('/api/yonetim/gecici_sifre', {'ad': 'Kaybeden'})
+        self.assertEqual(len(r['sifre']), 10)
+        self.assertIsNone(u.get('/api/ben')['kullanici'])
+        self.assertTrue(Istemci('G3').post('/api/giris', {'ad': 'Kaybeden', 'sifre': r['sifre']})['success'])
 
 
 if __name__ == '__main__':
