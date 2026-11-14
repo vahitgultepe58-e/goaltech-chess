@@ -41,6 +41,7 @@ tr:hover td { background: #34332f; }
 .note { color: var(--muted); font-size: 12.5px; margin-top: 12px; line-height: 1.5; }
 .center { text-align: center; padding: 40px 10px; }
 .empty { color: var(--muted); text-align: center; padding: 24px; }
+.uyari { background: rgba(217,195,90,.1); border: 1px solid rgba(217,195,90,.35); color: #e8dca0; border-radius: 10px; padding: 10px 12px; margin-bottom: 12px; font-size: 13.5px; }
 @media (max-width: 760px) { .cards { grid-template-columns: repeat(2, 1fr); } .card b { font-size: 22px; } }
 </style>
 </head>
@@ -77,7 +78,9 @@ tr:hover td { background: #34332f; }
 <script>
 const OLAYLAR = {
     ziyaret: '👀 Ziyaret', kayit: '🆕 Kayıt oldu', giris: '🔑 Giriş yaptı', giris_hatali: '⚠️ Hatalı giriş', cikis: '🚪 Çıkış yaptı',
-    rakip_aradi: '🔎 Rakip aradı', oyun_basladi: '▶️ Oyun başladı', katildi: '🤝 Odaya katıldı', izledi: '👁 İzlemeye girdi', oyun_bitti: '🏁 Oyun bitti'
+    rakip_aradi: '🔎 Rakip aradı', oyun_basladi: '▶️ Oyun başladı', katildi: '🤝 Odaya katıldı', izledi: '👁 İzlemeye girdi', oyun_bitti: '🏁 Oyun bitti',
+    sifre_degisti: '🔒 Şifre değiştirdi', sifre_sifirlama_istendi: '📨 Şifre sıfırlama istedi', sifre_sifirlandi: '🔓 Şifresini sıfırladı',
+    eposta_gonderildi: '📧 Doğrulama e-postası', eposta_dogrulandi: '✅ E-posta doğruladı', gecici_sifre: '🛠 Geçici şifre verildi'
 };
 const TUR = { bot: '🤖 Bot', lobi: '⚡ Rakip Bul', arkadas: '👥 Arkadaş' };
 const $ = id => document.getElementById(id);
@@ -123,14 +126,25 @@ async function yukle() {
              <td>${esc(o.detay || '')}</td><td class="muted">${esc(o.cihaz || '')}</td></tr>`).join('') + '</table>';
 
     $('uyeler').innerHTML = !r.kullanicilar.length ? '<div class="empty">Henüz üye yok</div>' :
-        '<table><tr><th>Kullanıcı</th><th>Kayıt</th><th>Son giriş</th><th>Elo</th><th>Puanlı oyun</th><th>G / B / M</th></tr>' + r.kullanicilar.map(k =>
-            `<tr><td><b>${esc(k.ad)}</b></td><td>${tarih(k.olusturma)}</td><td>${tarih(k.son_giris)}</td><td>${k.elo}</td><td>${k.oyun}</td>
-             <td>${k.galibiyet} / ${k.beraberlik} / ${k.maglubiyet}</td></tr>`).join('') + '</table>';
+        (r.eposta_hazir ? '' : '<div class="uyari">📧 E-posta gönderimi ayarlanmadı: kullanıcılar "Şifremi unuttum" ile şifre sıfırlayamaz. Şifresini unutan kullanıcıya buradan geçici şifre verebilirsin.</div>') +
+        '<table><tr><th>Kullanıcı</th><th>Kayıt</th><th>Son giriş</th><th>E-posta</th><th>Elo</th><th>Puanlı oyun</th><th>G / B / M</th><th></th></tr>' + r.kullanicilar.map(k =>
+            `<tr><td><b>${esc(k.ad)}</b></td><td>${tarih(k.olusturma)}</td><td>${tarih(k.son_giris)}</td>
+             <td>${k.eposta_dogrulandi ? '<span class="tag uye">doğrulandı</span>' : '<span class="tag">yok</span>'}</td><td>${k.elo}</td><td>${k.oyun}</td>
+             <td>${k.galibiyet} / ${k.beraberlik} / ${k.maglubiyet}</td>
+             <td><button class="btn" style="padding:5px 10px;font-size:12px" onclick="geciciSifre('${esc(k.ad)}')">Geçici şifre ver</button></td></tr>`).join('') + '</table>';
 
     $('canli').innerHTML = !r.canli.length ? '<div class="empty">Şu an açık oda yok</div>' :
         '<table><tr><th>Tür</th><th>Oyuncular</th><th>Süre</th><th>Hamle</th><th>Bağlı kişi</th><th></th></tr>' + r.canli.map(o =>
             `<tr><td>${TUR[o.tur] || esc(o.tur)}${o.bitti ? ' <span class="tag">bitti</span>' : ''}</td><td>${esc(o.beyaz_ad || '?')} – ${esc(o.siyah_ad || '?')}</td>
              <td>${sure(o.sure_ayari)}</td><td>${o.hamle_sayisi}</td><td>${o.bagli}</td><td><a class="btn" href="/?oda=${encodeURIComponent(o.id)}&izle=1" target="_blank">İzle</a></td></tr>`).join('') + '</table>';
+}
+async function geciciSifre(ad) {
+    if (!confirm(ad + ' için yeni bir geçici şifre oluşturulsun mu?\nMevcut şifresi çalışmaz hale gelir ve tüm cihazlarda oturumu kapanır.')) return;
+    const r = await (await fetch('/api/yonetim/gecici_sifre', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ad }) })).json();
+    if (!r.success) { alert(r.error); return; }
+    prompt(`${r.ad} kullanıcısının geçici şifresi (kopyalayıp kendisine güvenli şekilde ilet; giriş yapınca Hesap Ayarları'ndan değiştirmesini söyle):`, r.sifre);
+    yukle();
 }
 yukle();
 setInterval(() => { if (!document.hidden) yukle(); }, 15000);
