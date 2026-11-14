@@ -91,6 +91,49 @@ def misafir_adi():
     return ad or 'Misafir'
 
 
+# ---------------------------------------------------------------------
+# Yönetim paneli için olay kaydı (IP adresi saklanmaz)
+# ---------------------------------------------------------------------
+def cihaz_bilgisi():
+    """Tarayıcı bilgisinden kaba cihaz özeti: 'Telefon · Android · Chrome'."""
+    ua = request.headers.get('User-Agent', '')
+    tip = 'Tablet' if ('iPad' in ua or ('Android' in ua and 'Mobile' not in ua)) else \
+          'Telefon' if ('Mobi' in ua or 'iPhone' in ua) else 'Bilgisayar'
+    sistem = next((ad for anahtar, ad in (('Android', 'Android'), ('iPhone', 'iOS'), ('iPad', 'iOS'),
+                                          ('Windows', 'Windows'), ('Mac OS', 'macOS'), ('CrOS', 'ChromeOS'),
+                                          ('Linux', 'Linux')) if anahtar in ua), '?')
+    tarayici = next((ad for anahtar, ad in (('Edg/', 'Edge'), ('OPR/', 'Opera'), ('SamsungBrowser', 'Samsung'),
+                                            ('Firefox/', 'Firefox'), ('Chrome/', 'Chrome'), ('Safari/', 'Safari'))
+                     if anahtar in ua), '?')
+    return f"{tip} · {sistem} · {tarayici}"
+
+
+def olay(tur, detay=None, kullanici=None, ad=None, con=None):
+    k = kullanici if kullanici is not None else aktif_kullanici()
+    depo.olay_ekle(tur, kullanici_id=k['id'] if k else None, ad=(k['ad'] if k else ad),
+                   ziyaretci=(request.args.get('z') or '')[:40] or None, cihaz=cihaz_bilgisi(), detay=detay, con=con)
+
+
+def sure_metni(ayar):
+    try:
+        dk, ek = (int(x) for x in str(ayar).split('+'))
+    except ValueError:
+        return str(ayar or '')
+    return f"{dk} dk" + (f" +{ek} sn" if ek else '')
+
+
+def yonetici_mi(k):
+    if not k:
+        return False
+    adlar = {a.strip().lower() for a in os.environ.get('GOALTECH_YONETICILER', '').split(',') if a.strip()}
+    try:
+        with open(os.path.join(KLASOR, 'yoneticiler.txt'), encoding='utf-8') as f:
+            adlar |= {a.strip().lower() for a in f if a.strip() and not a.startswith('#')}
+    except FileNotFoundError:
+        pass
+    return k['ad'].lower() in adlar
+
+
 @app.before_request
 def _ara_sira_temizle():
     if random.random() < 0.01:
@@ -131,7 +174,14 @@ def _kullanici_ozeti(k):
 
 @app.route('/api/ben')
 def api_ben():
-    return tamam(kullanici=_kullanici_ozeti(aktif_kullanici()))
+    k = aktif_kullanici()
+    z = (request.args.get('z') or '')[:40]
+    if z and depo.ziyaret_yeni_mi(z):
+        olay('ziyaret', 'üye' if k else 'misafir', kullanici=k)
+    ozet = _kullanici_ozeti(k)
+    if ozet:
+        ozet['yonetici'] = yonetici_mi(k)
+    return tamam(kullanici=ozet)
 
 
 @app.route('/api/kayit', methods=['POST'])
@@ -148,7 +198,12 @@ def api_kayit():
     session.clear()
     session.permanent = True
     session['kid'] = kid
-    return tamam(kullanici=_kullanici_ozeti(depo.kullanici_id_ile(kid)))
+    yeni = depo.kullanici_id_ile(kid)
+    depo.son_giris_yaz(kid)
+    olay('kayit', 'yeni hesap', kullanici=yeni)
+    ozet = _kullanici_ozeti(yeni)
+    ozet['yonetici'] = yonetici_mi(yeni)
+    return tamam(kullanici=ozet)
 
 
 @app.route('/api/giris', methods=['POST'])
@@ -166,15 +221,21 @@ def api_giris():
     if not k or not check_password_hash(k['sifre_hash'], sifre):
         with _giris_kilit:
             _basarisiz_girisler.setdefault(anahtar, []).append(simdi)
+        olay('giris_hatali', 'hesap yok' if not k else 'yanlış şifre', kullanici=False, ad=ad[:20])
         return hata('Kullanıcı adı veya şifre hatalı.')
     session.clear()
     session.permanent = True
     session['kid'] = k['id']
-    return tamam(kullanici=_kullanici_ozeti(k))
+    depo.son_giris_yaz(k['id'])
+    olay('giris', None, kullanici=k)
+    ozet = _kullanici_ozeti(k)
+    ozet['yonetici'] = yonetici_mi(k)
+    return tamam(kullanici=ozet)
 
 
 @app.route('/api/cikis', methods=['POST'])
 def api_cikis():
+    olay('cikis')
     session.clear()
     return tamam()
 
@@ -216,6 +277,14 @@ def _beklenen(ra, rb):
     return 1 / (1 + 10 ** ((rb - ra) / 400))
 
 
+def _tur_metni(o):
+    if o['tur'] == 'bot':
+        return f"Bot ({o['bot']})"
+    if o['tur'] == 'lobi':
+        return 'Rakip Bul · ' + ('puanlı' if o['puanli'] else 'puansız')
+    return 'Arkadaş odası'
+
+
 def mac_kaydet_gerekirse(oid):
     """Oyun bittiyse ve henüz kaydedilmediyse maçı kaydeder, puanlıysa Elo'ları günceller (tek işlemde)."""
     def fn(o):
@@ -247,6 +316,11 @@ def mac_kaydet_gerekirse(oid):
         o['mac_id'] = mid
         if o['puanli']:
             o['elo_degisim'] = degisim
+        sebepler = {'mat': 'şah mat', 'pat': 'pat', 'teslim': 'teslim', 'sure': 'süre bitti', 'anlasma': 'anlaşma',
+                    'tekrar': '3 tekrar', 'elli': '50 hamle', 'materyal': 'yetersiz materyal', 'sure_materyal': 'süre bitti'}
+        depo.olay_ekle('oyun_bitti', ad=f"{b['ad']} – {s['ad']}", con=con, detay=(
+            f"{o['sonuc']} · {sebepler.get(o['sebep'], o['sebep'])} · {len(o['hamleler'])} yarım hamle · "
+            f"{_tur_metni(o)} · {sure_metni(o['sure_ayari'])}"))
         return mid, True
     depo.oda_guncelle(oid, fn)
 
@@ -274,6 +348,7 @@ def api_oda_olustur():
     o['_id'] = oid
     with depo.islem() as con:
         depo.oda_ekle(con, oid, o)
+    olay('oyun_basladi', f"{_tur_metni(o)} · {sure_metni(o['sure_ayari'])} · oda {oid}", ad=o['oyuncular']['beyaz']['ad'])
     return tamam(oda=oid)
 
 
@@ -284,6 +359,7 @@ def api_katil():
         return hata('Kimlik eksik.')
     kullanici = aktif_kullanici()
     baglantilar = depo.baglanti_durumu(oid)
+    yeni_katilim = {}
 
     def fn(o):
         if o is None:
@@ -291,6 +367,8 @@ def api_katil():
         t = oyun.taraf_bul(o, kim)
         if t:
             return t, False
+        if veri().get('izle'):            # "İzle" ile gelen kimse oyuncu yerine oturmaz
+            return 'izleyici', False
         # Aynı hesapla başka sekmeden/cihazdan gelindiyse yerini geri al
         if kullanici:
             for t in oyun.TARAFLAR:
@@ -303,12 +381,17 @@ def api_katil():
                 # Boş yer ya da 30 sn'den uzun süredir bağlı olmayan misafirin yeri
                 if not p['katildi'] or (not baglantilar.get(t) and p['kullanici_id'] is None and not kullanici):
                     _oyuncuyu_yerlestir(o, t, kim, kullanici, misafir_adi())
+                    yeni_katilim['evet'] = True
                     return t, True
         return 'izleyici', False
 
     taraf, _ = depo.oda_guncelle(oid, fn)
     if taraf is None:
         return hata('Oda bulunamadı.', 404, yok=True)
+    if taraf != 'izleyici' and yeni_katilim.get('evet'):
+        olay('katildi', f"Arkadaş odası · {taraf} · oda {oid}", ad=misafir_adi())
+    elif taraf == 'izleyici':
+        olay('izledi', f"oda {oid}", ad=misafir_adi())
     if taraf != 'izleyici':
         depo.nabiz(oid, taraf)
     return tamam(taraf=taraf)
@@ -634,6 +717,8 @@ def _eslestir(con, ben, rakip_kaydi):
     depo.oda_ekle(con, oid, o)
     con.execute("UPDATE kuyruk SET oda = ?, taraf = ? WHERE kimlik = ?", (oid, oyun.rakip(benim_taraf), rakip_kaydi['kimlik']))
     con.execute("DELETE FROM kuyruk WHERE kimlik = ?", (ben['kimlik'],))
+    olay('oyun_basladi', f"{_tur_metni(o)} · {sure_metni(o['sure_ayari'])} · {o['oyuncular']['beyaz']['ad']} – "
+         f"{o['oyuncular']['siyah']['ad']} · oda {oid}", kullanici=ben['kullanici'] or False, ad=ben['ad'], con=con)
     return oid, benim_taraf
 
 
@@ -661,6 +746,7 @@ def api_lobi_ara():
             return tamam(eslesme={'oda': oid, 'taraf': taraf})
         con.execute("INSERT INTO kuyruk (kimlik, ad, kullanici_id, elo, sure_ayari, zaman, son) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (ben['kimlik'], ben['ad'], kid, ben['kullanici']['elo'] if ben['kullanici'] else None, sure, simdi, simdi))
+        olay('rakip_aradi', sure_metni(sure), kullanici=ben['kullanici'] or False, ad=ben['ad'], con=con)
     return tamam(bekliyor=True)
 
 
@@ -706,6 +792,36 @@ def api_lobi():
         (kim, time.time() - depo.KUYRUK_SURESI))]
     return tamam(eslesme=eslesme, araniyor=bool(benim and not benim['oda']),
                  bekleyenler=bekleyenler, canli=depo.canli_oyunlar())
+
+
+# =====================================================================
+# Yönetim paneli (sadece yoneticiler.txt'deki hesaplar)
+# =====================================================================
+@app.route('/yonetim')
+def yonetim_sayfasi():
+    yanit = send_file(os.path.join(KLASOR, 'yonetim.html'))
+    yanit.headers['Cache-Control'] = 'no-cache'
+    return yanit
+
+
+@app.route('/api/yonetim')
+def api_yonetim():
+    k = aktif_kullanici()
+    if not k:
+        return hata('Önce giriş yapmalısın.', 401)
+    if not yonetici_mi(k):
+        return hata('Bu sayfa sadece yöneticilere açık.', 403)
+    tur = request.args.get('tur') or None
+    ara = (request.args.get('ara') or '').strip()[:40] or None
+    con = depo.baglanti()
+    sinir = time.time() - depo.BAGLANTI_SURESI
+    canli = [dict(r) for r in con.execute(
+        "SELECT o.id, o.tur, o.beyaz_ad, o.siyah_ad, o.sure_ayari, o.hamle_sayisi, o.bitti, "
+        "(SELECT COUNT(*) FROM baglantilar b WHERE b.oda = o.id AND b.son > ?) AS bagli "
+        "FROM odalar o WHERE o.id IN (SELECT oda FROM baglantilar WHERE son > ?) ORDER BY o.guncelleme DESC LIMIT 50",
+        (sinir, sinir))]
+    return tamam(istatistik=depo.istatistikler(), olaylar=depo.olaylar(400, tur, ara),
+                 kullanicilar=depo.kullanicilar_listesi(), canli=canli)
 
 
 # =====================================================================

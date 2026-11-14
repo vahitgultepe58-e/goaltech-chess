@@ -106,6 +106,21 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
 .mode-card h3 { margin: 4px 0 0; font-size: 18px; }
 .mode-card p { margin: 2px 0 0; font-size: 13px; color: var(--muted); }
 .mode-icon { font-size: 38px; }
+/* Süre seçici */
+.tc-baslik { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin: 10px 0 5px; text-align: left; }
+.tc-baslik:first-child { margin-top: 0; }
+.tc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px; }
+.tc-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border-radius: 10px; border: 1px solid var(--line);
+          background: var(--input); color: var(--text); cursor: pointer; }
+.tc-btn:hover { background: #343330; }
+.tc-btn b { font-size: 16px; }
+.tc-btn small { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.tc-btn.active { background: var(--green-dark); border-color: var(--green); }
+.tc-btn.active small { color: #e3f2d3; }
+.tc-aciklama { margin-top: 10px; font-size: 13px; color: var(--muted); text-align: left; line-height: 1.45; background: rgba(129,182,76,.08);
+               border: 1px solid rgba(129,182,76,.25); border-radius: 10px; padding: 8px 10px; }
+.tc-aciklama b { color: var(--text); }
+.gizlilik { color: var(--muted); font-size: 12px; text-align: center; margin-top: 4px; }
 .name-row { margin-bottom: 16px; }
 .lists { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .list-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 14px; min-height: 120px; }
@@ -236,6 +251,7 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
 </div>
 <div class="menu-pop hidden" id="user-menu">
     <button onclick="profilAc()">👤 Profilim</button>
+    <button id="menu-yonetim" class="hidden" onclick="location.href='/yonetim'">🛠 Yönetim Paneli</button>
     <button onclick="liderlikAc()">🏆 Liderlik Tablosu</button>
     <button onclick="cikisYap()">🚪 Çıkış Yap</button>
 </div>
@@ -271,7 +287,7 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
         <div class="modes">
             <div class="mode-card">
                 <div><div class="mode-icon">⚡</div><h3>Rakip Bul</h3><p>Çevrimiçi biriyle eşleş</p></div>
-                <div class="seg" id="lobby-time"></div>
+                <div id="lobby-time"></div>
                 <button class="btn-big" onclick="rakipAra()">OYNA</button>
             </div>
             <div class="mode-card">
@@ -292,6 +308,7 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
             <div class="list-box"><h4>👁 Canlı Oyunlar</h4><div id="live-list"><div class="empty">Şu an oynanan oyun yok</div></div></div>
         </div>
     </div>
+    <div class="gizlilik">Oyunu geliştirmek için ziyaret, giriş ve oyun kayıtları (zaman, kullanıcı adı, cihaz türü) 90 gün tutulur. IP adresi saklanmaz.</div>
 </div>
 
 <!-- ================= OYUN ================= -->
@@ -307,8 +324,8 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
         </div>
         <div class="side-col">
             <div class="side-box" id="time-box">
-                <h4>⏱ Süre <span class="muted" style="text-transform:none;font-size:12px">ilk hamleden önce</span></h4>
-                <div class="seg" id="game-time"></div>
+                <h4>⏱ Oyun süresi <span class="muted" style="text-transform:none;font-size:12px">ilk hamleden önce değişir</span></h4>
+                <div id="game-time"></div>
             </div>
             <div class="side-box">
                 <h4><span id="mode-label">Hamleler</span>
@@ -402,7 +419,32 @@ const IMAGES = {
     n: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg', p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg'
 };
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
-const SURELER = ['1+0', '3+0', '3+2', '5+0', '5+3', '10+0', '10+5', '15+10'];
+const SURE_GRUPLARI = [['⚡ Çok hızlı', ['1+0']], ['🔥 Hızlı', ['3+0', '3+2', '5+0', '5+3']], ['🕐 Normal', ['10+0', '10+5', '15+10']]];
+function sureParca(v) { const [d, e] = String(v || '3+0').split('+').map(Number); return { d, e }; }
+function sureKisa(v) { if (!v) return ''; const { d, e } = sureParca(v); return d + ' dk' + (e ? ' + ' + e + ' sn' : ''); }
+function sureCumle(v) {
+    const { d, e } = sureParca(v);
+    return `Her oyuncunun toplam <b>${d} dakikası</b> var.` +
+        (e ? ` Her hamleden sonra saatine <b>${e} saniye</b> eklenir.` : ' Ek süre yok: saatin sıfırlanırsa kaybedersin.');
+}
+function sureSeciciKur(el, secili, fn) {
+    el.innerHTML = '';
+    const aciklama = document.createElement('div'); aciklama.className = 'tc-aciklama'; aciklama.innerHTML = sureCumle(secili);
+    SURE_GRUPLARI.forEach(([baslik, liste]) => {
+        el.insertAdjacentHTML('beforeend', `<div class="tc-baslik">${baslik}</div>`);
+        const grid = document.createElement('div'); grid.className = 'tc-grid';
+        liste.forEach(v => {
+            const { d, e } = sureParca(v);
+            const b = document.createElement('button'); b.className = 'tc-btn' + (v === secili ? ' active' : ''); b.dataset.v = v;
+            b.title = sureCumle(v).replace(/<[^>]+>/g, '');
+            b.innerHTML = `<b>${d} dk</b><small>${e ? '+' + e + ' sn / hamle' : 'ek süre yok'}</small>`;
+            b.onclick = () => { el.querySelectorAll('.tc-btn').forEach(x => x.classList.toggle('active', x === b)); aciklama.innerHTML = sureCumle(v); fn && fn(v); };
+            grid.appendChild(b);
+        });
+        el.appendChild(grid);
+    });
+    el.appendChild(aciklama);
+}
 const SEVIYE = { kolay: 'Kolay', orta: 'Orta', zor: 'Zor' };
 const $ = id => document.getElementById(id);
 
@@ -411,12 +453,14 @@ function depoYaz(s, k, v) { try { s.setItem(k, v); } catch (e) {} }
 
 let myId = depoAl(sessionStorage, 'goaltech_pid');
 if (!myId) { myId = Math.random().toString(36).slice(2) + Date.now().toString(36); depoYaz(sessionStorage, 'goaltech_pid', myId); }
+let ziyaretciId = depoAl(localStorage, 'goaltech_vid');
+if (!ziyaretciId) { ziyaretciId = 'v' + Math.random().toString(36).slice(2) + Date.now().toString(36); depoYaz(localStorage, 'goaltech_vid', ziyaretciId); }
 
 const ODA_UCLARI = ['/api/katil', '/api/durum', '/api/gecerli', '/api/hamle', '/api/teslim', '/api/istek', '/api/cevap', '/api/sure', '/api/sohbet', '/api/ayril'];
 async function api(yol, govde, yontem) {
     const ayir = yol.includes('?') ? '&' : '?';
     const odaEk = oda && ODA_UCLARI.some(u => yol.startsWith(u)) ? '&oda=' + encodeURIComponent(oda) : '';
-    const url = yol + ayir + 'id=' + encodeURIComponent(myId) + odaEk;
+    const url = yol + ayir + 'id=' + encodeURIComponent(myId) + '&z=' + encodeURIComponent(ziyaretciId) + odaEk;
     const secenek = { method: yontem || (govde !== undefined ? 'POST' : 'GET'), credentials: 'same-origin' };
     if (govde !== undefined) { secenek.headers = { 'Content-Type': 'application/json' }; secenek.body = JSON.stringify(govde); }
     const res = await fetch(url, secenek);
@@ -492,6 +536,7 @@ function hesapCiz() {
         el.innerHTML = `<button class="btn" onclick="liderlikAc()">🏆</button><button class="btn" onclick="authAc('giris')">Giriş</button><button class="btn green" onclick="authAc('kayit')">Kayıt Ol</button>`;
     }
     document.querySelectorAll('.guest-only').forEach(e => e.style.display = ben ? 'none' : '');
+    $('menu-yonetim').classList.toggle('hidden', !(ben && ben.yonetici));
 }
 document.addEventListener('click', () => $('user-menu').classList.add('hidden'));
 let authMod = 'giris';
@@ -522,7 +567,7 @@ function oyuncuAdi() {
 let oda = null, aramaZamanlayici = null, lobiZamanlayici = null, aramaBaslangic = 0, aramaSure = null;
 const kayitliAd = depoAl(localStorage, 'goaltech_player') || '';
 $('username').value = kayitliAd; $('join-name').value = kayitliAd;
-segKur($('lobby-time'), SURELER, depoAl(localStorage, 'goaltech_sure') || '3+0', v => depoYaz(localStorage, 'goaltech_sure', v));
+sureSeciciKur($('lobby-time'), depoAl(localStorage, 'goaltech_sure') || '3+0', v => depoYaz(localStorage, 'goaltech_sure', v));
 
 function heroTahta() {
     const el = $('hero-board'), satirlar = ['rnbqkbnr', 'pppppppp', '', '', '', '', 'PPPPPPPP', 'RNBQKBNR'];
@@ -557,7 +602,7 @@ async function lobiYenile() {
     w.innerHTML = digerleri.length ? '' : '<div class="empty">Şu an bekleyen yok</div>';
     digerleri.forEach(b => {
         const d = document.createElement('div'); d.className = 'list-item';
-        d.innerHTML = `<span class="who">${esc(b.ad)} ${b.elo ? '<span class="muted">(' + b.elo + ')</span>' : ''}</span><span class="tc">${esc(b.sure_ayari)}</span>`;
+        d.innerHTML = `<span class="who">${esc(b.ad)} ${b.elo ? '<span class="muted">(' + b.elo + ')</span>' : ''}</span><span class="tc">⏱ ${esc(sureKisa(b.sure_ayari))}</span>`;
         const btn = document.createElement('button'); btn.className = 'btn green'; btn.innerText = 'Oyna'; btn.onclick = () => meydanOku(b.no);
         d.appendChild(btn); w.appendChild(d);
     });
@@ -565,8 +610,8 @@ async function lobiYenile() {
     l.innerHTML = r.canli.length ? '' : '<div class="empty">Şu an oynanan oyun yok</div>';
     r.canli.forEach(g => {
         const d = document.createElement('div'); d.className = 'list-item';
-        d.innerHTML = `<span class="who">${esc(g.beyaz_ad || '?')} – ${esc(g.siyah_ad || '?')}</span><span class="tc">${esc(g.sure_ayari)} · ${g.hamle_sayisi} hamle</span>`;
-        const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = 'İzle'; btn.onclick = () => odayaGir(g.id);
+        d.innerHTML = `<span class="who">${esc(g.beyaz_ad || '?')} – ${esc(g.siyah_ad || '?')}</span><span class="tc">⏱ ${esc(sureKisa(g.sure_ayari))} · ${g.hamle_sayisi} hamle</span>`;
+        const btn = document.createElement('button'); btn.className = 'btn'; btn.innerText = 'İzle'; btn.onclick = () => odayaGir(g.id, true);
         d.appendChild(btn); l.appendChild(d);
     });
 }
@@ -577,7 +622,7 @@ async function rakipAra() {
     if (!r.success) { bildir(r.error, true); return; }
     if (r.eslesme) { eslesmeBulundu(r.eslesme); return; }
     aramaBaslangic = Date.now();
-    $('search-info').innerText = aramaSure + (ben ? ' · puanlı' : ' · misafir (puansız)');
+    $('search-info').innerText = '⏱ ' + sureKisa(aramaSure) + (ben ? ' · puanlı' : ' · misafir (puansız)');
     ac('m-search');
     clearInterval(aramaZamanlayici);
     aramaZamanlayici = setInterval(async () => {
@@ -619,11 +664,11 @@ let taraf = 'izleyici', S = null, surum = -1, yoklama = null, ws = null;
 let secili = null, gecerliler = [], islemde = false, bekleyenTerfi = null, ters = false;
 let saatTaban = null, saatAn = 0, sonHamleSayisi = null, gosterilenBitis = null, sohbetSon = 0;
 
-async function odayaGir(id) {
+async function odayaGir(id, izle) {
     clearInterval(lobiZamanlayici);
     oda = id;
-    try { history.replaceState(null, '', location.pathname + '?oda=' + encodeURIComponent(id)); } catch (e) {}
-    const r = await api('/api/katil', { ad: oyuncuAdi() });
+    try { history.replaceState(null, '', location.pathname + '?oda=' + encodeURIComponent(id) + (izle ? '&izle=1' : '')); } catch (e) {}
+    const r = await api('/api/katil', { ad: oyuncuAdi(), izle: !!izle });
     if (!r.success) { oda = null; bildir(r.yok ? 'Oda bulunamadı veya süresi doldu.' : r.error, true); menuyeDon(); return; }
     taraf = r.taraf; ters = taraf === 'siyah';
     S = null; surum = -1; secili = null; gecerliler = []; sonHamleSayisi = null; gosterilenBitis = null; sohbetSon = 0;
@@ -678,8 +723,9 @@ function durumUygula(o) {
     if (yeniHamle) hamleAnimasyonu();
     barlariCiz(); hamleListesi(); mesajCiz(); dugmeler(); istekPenceresi(); sohbetCiz(o.sohbet || []);
     $('time-box').style.display = (o.tur !== 'lobi' && taraf !== 'izleyici' && (!o.hamleler.length || o.bitti)) ? '' : 'none';
-    segKur($('game-time'), SURELER, o.sure_ayari, sureDegistir);
-    const etiket = o.tur === 'bot' ? '🤖 Bot · ' + (SEVIYE[o.bot] || '') : o.tur === 'lobi' ? (o.puanli ? '⚡ Puanlı · ' : '⚡ Puansız · ') + o.sure_ayari : '👥 Arkadaş · ' + o.sure_ayari;
+    const secili = $('game-time').querySelector('.tc-btn.active');
+    if (!secili || secili.dataset.v !== o.sure_ayari) sureSeciciKur($('game-time'), o.sure_ayari, sureDegistir);
+    const etiket = o.tur === 'bot' ? '🤖 Bot · ' + (SEVIYE[o.bot] || '') : o.tur === 'lobi' ? (o.puanli ? '⚡ Puanlı · ' : '⚡ Puansız · ') + sureKisa(o.sure_ayari) : '👥 Arkadaş · ' + sureKisa(o.sure_ayari);
     $('mode-label').innerText = etiket;
     if (o.bitti && gosterilenBitis !== o.hamleler.length + ':' + o.sonuc && (onceki ? !onceki.bitti : true) && !(o.sonuc === '*' && taraf === 'izleyici')) {
         gosterilenBitis = o.hamleler.length + ':' + o.sonuc;
@@ -1030,7 +1076,7 @@ async function profilAc(ad) {
             const yazi = { win: 'Galibiyet', loss: 'Mağlubiyet', draw: 'Berabere' }[kazanc];
             const deg = beyaz ? m.beyaz_degisim : m.siyah_degisim;
             const tur = m.tur === 'bot' ? '🤖 ' + (SEVIYE[m.bot_zorluk] || '') : m.puanli ? '⚡ Puanlı' : (m.tur === 'lobi' ? '⚡' : '👥');
-            h += `<tr class="click" onclick="tekrarAc(${m.id})"><td>${beyaz ? '⚪' : '⚫'} ${esc(rakip)}</td><td class="${kazanc}">${yazi}</td><td>${tur} <span class="muted">${esc(m.sure_ayari || '')}</span></td>
+            h += `<tr class="click" onclick="tekrarAc(${m.id})"><td>${beyaz ? '⚪' : '⚫'} ${esc(rakip)}</td><td class="${kazanc}">${yazi}</td><td>${tur} <span class="muted">${esc(sureKisa(m.sure_ayari))}</span></td>
                 <td>${Math.ceil((m.hamle || 0) / 2)}</td><td>${deg == null ? '<span class="muted">–</span>' : `<span class="${deg >= 0 ? 'win' : 'loss'}">${deg >= 0 ? '+' : ''}${deg}</span>`}</td>
                 <td class="muted">${new Date(m.tarih * 1000).toLocaleDateString('tr-TR')}</td></tr>`;
         });
@@ -1047,7 +1093,7 @@ async function tekrarAc(mid) {
     rp = { tahtalar: r.tahtalar, san: r.san, son: r.son_hamleler, i: r.tahtalar.length - 1, kareler: [] };
     const m = r.mac;
     $('replay-title').innerText = `${m.beyaz_ad || 'Beyaz'} – ${m.siyah_ad || 'Siyah'}`;
-    $('replay-info').innerText = `${m.sonuc} · ${m.sure_ayari || ''} · ${new Date(m.tarih * 1000).toLocaleString('tr-TR')}`;
+    $('replay-info').innerText = `${m.sonuc} · ${sureKisa(m.sure_ayari)} · ${new Date(m.tarih * 1000).toLocaleString('tr-TR')}`;
     const b = $('replay-board'); b.innerHTML = '';
     for (let x = 0; x < 64; x++) { const d = document.createElement('div'); b.appendChild(d); rp.kareler.push(d); }
     let h = '<table>';
@@ -1079,6 +1125,7 @@ document.addEventListener('keydown', e => {
     await hesapYukle();
     const p = new URLSearchParams(location.search).get('oda');
     if (!p) { menuGoster(); return; }
+    if (new URLSearchParams(location.search).get('izle')) { odayaGir(p, true); return; }
     // Davet linki: hesabı ya da kayıtlı adı varsa doğrudan gir, yoksa ad sor
     if (ben || depoAl(sessionStorage, 'goaltech_oda_' + p) || kayitliAd) { depoYaz(sessionStorage, 'goaltech_oda_' + p, '1'); odayaGir(p); return; }
     $('modes-panel').style.display = 'none'; $('join-panel').style.display = '';
