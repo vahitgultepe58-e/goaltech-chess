@@ -120,6 +120,38 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
 .tc-aciklama { margin-top: 10px; font-size: 13px; color: var(--muted); text-align: left; line-height: 1.45; background: rgba(129,182,76,.08);
                border: 1px solid rgba(129,182,76,.25); border-radius: 10px; padding: 8px 10px; }
 .tc-aciklama b { color: var(--text); }
+.av { width: 38px; height: 38px; border-radius: 50%; background: #3a3936; border: 1px solid var(--line); display: inline-flex; align-items: center;
+      justify-content: center; font-size: 23px; line-height: 1; flex: none; }
+.av.kucuk { width: 26px; height: 26px; font-size: 16px; vertical-align: middle; margin-right: 6px; }
+.av.buyuk { width: 110px; height: 110px; font-size: 64px; border: 3px solid var(--line); }
+.av-sec { cursor: pointer; width: 48px; height: 48px; font-size: 28px; }
+.av-sec:hover { border-color: var(--green); }
+.ad-satiri { display: flex; gap: 10px; align-items: center; }
+.av-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; justify-items: center; }
+.av-grid button { width: 56px; height: 56px; font-size: 32px; border-radius: 50%; background: var(--input); border: 2px solid var(--line); cursor: pointer; transition: transform .1s; }
+.av-grid button:hover { transform: scale(1.1); border-color: var(--green); }
+.av-grid button.active { border-color: var(--green); background: var(--green-dark); }
+.pbar-sol { display: flex; gap: 10px; align-items: center; min-width: 0; }
+/* Eşleşme (VS) ekranı */
+#vs { display: none; position: fixed; inset: 0; z-index: 400; background: rgba(24,23,21,.96); align-items: center; justify-content: center; flex-direction: column; gap: 26px; padding: 16px; }
+#vs.open { display: flex; }
+.vs-ust { font-size: 15px; color: var(--muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+.vs-sira { display: flex; align-items: center; justify-content: center; gap: clamp(14px, 5vw, 60px); width: 100%; }
+.vs-kart { display: flex; flex-direction: column; align-items: center; gap: 8px; width: min(38vw, 220px); text-align: center; }
+.vs-kart.sol { animation: vsSol .5s cubic-bezier(.2,1.2,.4,1) both; } .vs-kart.sag { animation: vsSag .5s cubic-bezier(.2,1.2,.4,1) both; }
+@keyframes vsSol { from { opacity: 0; transform: translateX(-60px); } to { opacity: 1; transform: none; } }
+@keyframes vsSag { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: none; } }
+.vs-kart .av.buyuk.ben { border-color: var(--green); }
+.vs-ad { font-size: 20px; font-weight: 800; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vs-elo { color: var(--muted); font-weight: 700; }
+.vs-renk { font-size: 13px; padding: 3px 12px; border-radius: 20px; font-weight: 700; }
+.vs-renk.beyaz { background: #eee; color: #222; } .vs-renk.siyah { background: #111; color: #eee; border: 1px solid #555; }
+.vs-vs { font-family: 'Anton', 'Impact', sans-serif; font-size: clamp(40px, 9vw, 72px); color: var(--green); text-shadow: 0 4px 0 var(--green-dark); animation: pop .4s ease .3s both; }
+.vs-alt { color: var(--muted); font-weight: 700; text-align: center; }
+.vs-cubuk { width: min(320px, 70vw); height: 6px; border-radius: 3px; background: #3a3936; overflow: hidden; }
+.vs-cubuk i { display: block; height: 100%; width: 0; background: var(--green); }
+#vs.open .vs-cubuk i { animation: vsDol 3s linear forwards; }
+@keyframes vsDol { to { width: 100%; } }
 .ipucu { font-size: 12px; color: var(--muted); margin-top: 5px; }
 .link { color: var(--green); font-size: 14px; }
 .bolum { margin: 6px 0 10px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
@@ -256,6 +288,7 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
 </div>
 <div class="menu-pop hidden" id="user-menu">
     <button onclick="profilAc()">👤 Profilim</button>
+    <button onclick="avatarAc()">🐾 Avatarımı Değiştir</button>
     <button onclick="ayarlarAc()">⚙️ Hesap Ayarları</button>
     <button id="menu-yonetim" class="hidden" onclick="location.href='/yonetim'">🛠 Yönetim Paneli</button>
     <button onclick="liderlikAc()">🏆 Liderlik Tablosu</button>
@@ -287,7 +320,7 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
     <div class="panel" id="modes-panel">
         <div class="name-row guest-only">
             <label class="lbl" for="username">Oyuncu Adı (misafir)</label>
-            <input type="text" id="username" maxlength="20" placeholder="Adını yaz">
+            <div class="ad-satiri"><button class="av av-sec" id="guest-av" title="Avatarını değiştir" onclick="avatarAc()"></button><input type="text" id="username" maxlength="20" placeholder="Adını yaz"></div>
             <div class="muted" style="font-size:12px;margin-top:6px">Puanlı oynamak ve Elo kazanmak için <a href="#" onclick="authAc('kayit');return false" style="color:var(--green)">hesap oluştur</a>.</div>
         </div>
         <div class="modes">
@@ -361,6 +394,22 @@ label.lbl { display: block; font-size: 11px; font-weight: 700; color: var(--mute
     <div class="big-icon dots-wrap">⏳</div><h3 style="margin:8px 0 4px">Rakip aranıyor<span class="dots"></span></h3>
     <div class="muted" id="search-info"></div><div class="muted" id="search-time" style="margin:6px 0 16px"></div>
     <button class="btn" onclick="aramaIptal()">İptal</button>
+</div></div>
+
+<div id="vs">
+    <div class="vs-ust">⚔️ Rakip bulundu</div>
+    <div class="vs-sira">
+        <div class="vs-kart sol" id="vs-ben"></div>
+        <div class="vs-vs">VS</div>
+        <div class="vs-kart sag" id="vs-rakip"></div>
+    </div>
+    <div class="vs-alt" id="vs-bilgi"></div>
+    <div class="vs-cubuk"><i></i></div>
+</div>
+
+<div class="modal" id="m-avatar"><div class="modal-box center">
+    <div class="modal-head"><h3>🐾 Avatarını Seç</h3><button class="x" onclick="kapat('m-avatar')">×</button></div>
+    <div class="av-grid" id="av-grid"></div>
 </div></div>
 
 <div class="modal" id="m-promo"><div class="modal-box center"><h3 style="margin:0">Terfi Edecek Taşı Seç</h3><div class="promo-pieces" id="promo-options"></div></div></div>
@@ -466,6 +515,7 @@ const IMAGES = {
     r: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg', b: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
     n: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg', p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg'
 };
+Object.values(IMAGES).forEach(u => { const i = new Image(); i.src = u; });   // taş görsellerini önceden indir
 const GLYPHS = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
 const SURE_GRUPLARI = [['⚡ Çok hızlı', ['1+0']], ['🔥 Hızlı', ['3+0', '3+2', '5+0', '5+3']], ['🕐 Normal', ['10+0', '10+5', '15+10']]];
 function sureParca(v) { const [d, e] = String(v || '3+0').split('+').map(Number); return { d, e }; }
@@ -494,6 +544,7 @@ function sureSeciciKur(el, secili, fn) {
     el.appendChild(aciklama);
 }
 const SEVIYE = { kolay: 'Kolay', orta: 'Orta', zor: 'Zor' };
+const AVATARLAR = ['🦁', '🐯', '🦊', '🐺', '🐻', '🐼', '🐨', '🐱', '🐶', '🐰', '🦉', '🦅', '🐧', '🐴', '🐘', '🐵', '🐢', '🐬', '🐙', '🐸'];
 const $ = id => document.getElementById(id);
 
 function depoAl(s, k) { try { return s.getItem(k); } catch (e) { return null; } }
@@ -580,14 +631,36 @@ async function hesapYukle() {
 function hesapCiz() {
     const el = $('account');
     if (ben) {
-        el.innerHTML = `<span class="user-chip" onclick="event.stopPropagation(); $('user-menu').classList.toggle('hidden')">👤 ${esc(ben.ad)} <span class="elo">${ben.elo}</span> ▾</span>`;
+        el.innerHTML = `<span class="user-chip" onclick="event.stopPropagation(); $('user-menu').classList.toggle('hidden')"><span class="av kucuk" style="margin:0">${ben.avatar || '👤'}</span> ${esc(ben.ad)} <span class="elo">${ben.elo}</span> ▾</span>`;
     } else {
         el.innerHTML = `<button class="btn" onclick="liderlikAc()">🏆</button><button class="btn" onclick="authAc('giris')">Giriş</button><button class="btn green" onclick="authAc('kayit')">Kayıt Ol</button>`;
     }
     document.querySelectorAll('.guest-only').forEach(e => e.style.display = ben ? 'none' : '');
     $('menu-yonetim').classList.toggle('hidden', !(ben && ben.yonetici));
+    $('guest-av').textContent = misafirAvatar;
 }
 document.addEventListener('click', () => $('user-menu').classList.add('hidden'));
+// ---------------- Avatar ----------------
+let misafirAvatar = depoAl(localStorage, 'goaltech_avatar');
+if (!AVATARLAR.includes(misafirAvatar)) { misafirAvatar = AVATARLAR[Math.floor(Math.random() * AVATARLAR.length)]; depoYaz(localStorage, 'goaltech_avatar', misafirAvatar); }
+function benimAvatar() { return (ben && ben.avatar) || misafirAvatar; }
+function avatarAc() {
+    const g = $('av-grid'); g.innerHTML = '';
+    AVATARLAR.forEach(a => {
+        const b = document.createElement('button'); b.textContent = a; if (a === benimAvatar()) b.classList.add('active');
+        b.onclick = () => avatarSec(a); g.appendChild(b);
+    });
+    ac('m-avatar');
+}
+async function avatarSec(a) {
+    kapat('m-avatar');
+    if (ben) {
+        const r = await api('/api/avatar', { avatar: a });
+        if (!r.success) { bildir(r.error, true); return; }
+        ben = r.kullanici;
+    } else { misafirAvatar = a; depoYaz(localStorage, 'goaltech_avatar', a); }
+    hesapCiz(); bildir('Avatarın güncellendi ' + a);
+}
 let authMod = 'giris';
 function authAc(mod) { authSekme(mod); $('auth-err').innerText = ''; ac('m-auth'); setTimeout(() => $('auth-ad').focus(), 50); }
 function authSekme(mod) {
@@ -602,6 +675,7 @@ function authSekme(mod) {
 async function authGonder() {
     const govde = { ad: $('auth-ad').value.trim(), sifre: $('auth-sifre').value };
     if (authMod === 'kayit' && epostaHazir) govde.eposta = $('auth-eposta').value.trim();
+    if (authMod === 'kayit') govde.avatar = misafirAvatar;
     const r = await api('/api/' + authMod, govde);
     if (!r.success) { $('auth-err').innerText = r.error; return; }
     ben = r.kullanici; $('auth-sifre').value = ''; kapat('m-auth'); hesapCiz();
@@ -701,7 +775,7 @@ async function lobiYenile() {
     w.innerHTML = digerleri.length ? '' : '<div class="empty">Şu an bekleyen yok</div>';
     digerleri.forEach(b => {
         const d = document.createElement('div'); d.className = 'list-item';
-        d.innerHTML = `<span class="who">${esc(b.ad)} ${b.elo ? '<span class="muted">(' + b.elo + ')</span>' : ''}</span><span class="tc">⏱ ${esc(sureKisa(b.sure_ayari))}</span>`;
+        d.innerHTML = `<span class="who"><span class="av kucuk">${b.avatar || '♟'}</span>${esc(b.ad)} ${b.elo ? '<span class="muted">(' + b.elo + ')</span>' : ''}</span><span class="tc">⏱ ${esc(sureKisa(b.sure_ayari))}</span>`;
         const btn = document.createElement('button'); btn.className = 'btn green'; btn.innerText = 'Oyna'; btn.onclick = () => meydanOku(b.no);
         d.appendChild(btn); w.appendChild(d);
     });
@@ -717,7 +791,7 @@ async function lobiYenile() {
 
 async function rakipAra() {
     aramaSure = segDeger($('lobby-time'));
-    const r = await api('/api/lobi/ara', { sure: aramaSure, ad: oyuncuAdi() });
+    const r = await api('/api/lobi/ara', { sure: aramaSure, ad: oyuncuAdi(), avatar: benimAvatar() });
     if (!r.success) { bildir(r.error, true); return; }
     if (r.eslesme) { eslesmeBulundu(r.eslesme); return; }
     aramaBaslangic = Date.now();
@@ -729,25 +803,38 @@ async function rakipAra() {
         const s = await api('/api/lobi');
         if (s.eslesme) eslesmeBulundu(s.eslesme);
         else if (!s['araniyor']) { // kayıt düştüyse (ör. sekme uyudu) yeniden gir
-            const t = await api('/api/lobi/ara', { sure: aramaSure, ad: oyuncuAdi() });
+            const t = await api('/api/lobi/ara', { sure: aramaSure, ad: oyuncuAdi(), avatar: benimAvatar() });
             if (t.eslesme) eslesmeBulundu(t.eslesme);
         }
     }, 1000);
 }
 async function aramaIptal() { clearInterval(aramaZamanlayici); kapat('m-search'); await api('/api/lobi/iptal', {}); }
 async function meydanOku(no) {
-    const r = await api('/api/lobi/kabul', { no, ad: oyuncuAdi() });
+    const r = await api('/api/lobi/kabul', { no, ad: oyuncuAdi(), avatar: benimAvatar() });
     if (!r.success) { bildir(r.error, true); lobiYenile(); return; }
     eslesmeBulundu(r.eslesme);
 }
 function eslesmeBulundu(e) {
     clearInterval(aramaZamanlayici); kapat('m-search');
-    SES.bitis(); bildir('Rakip bulundu! ⚔️');
-    odayaGir(e.oda);
+    SES.bitis();
+    odayaGir(e.oda, false, true);
+}
+function vsGoster() {
+    if (!S || taraf === 'izleyici') return;
+    const kart = (t, benMi) => {
+        const p = S.oyuncular[t];
+        return `<span class="av buyuk ${benMi ? 'ben' : ''}">${p.avatar || '♟'}</span><div class="vs-ad">${esc(p.ad || '?')}</div>
+            <div class="vs-elo">${p.elo ? 'Elo ' + p.elo : 'Misafir'}</div><span class="vs-renk ${t}">${t === 'beyaz' ? '⚪ Beyaz' : '⚫ Siyah'}</span>`;
+    };
+    const rakip = taraf === 'beyaz' ? 'siyah' : 'beyaz';
+    $('vs-ben').innerHTML = kart(taraf, true); $('vs-rakip').innerHTML = kart(rakip, false);
+    $('vs-bilgi').innerText = '⏱ ' + sureKisa(S.sure_ayari) + (S.puanli ? ' · Puanlı oyun' : ' · Puansız oyun') + (taraf === 'beyaz' ? ' · İlk hamle sende' : '');
+    const v = $('vs'); v.classList.remove('open'); void v.offsetWidth; v.classList.add('open');
+    setTimeout(() => v.classList.remove('open'), 3200);
 }
 
 async function odaKur(tur) {
-    const govde = { tur, ad: oyuncuAdi(), sure: depoAl(localStorage, 'goaltech_sure') || '3+0' };
+    const govde = { tur, ad: oyuncuAdi(), avatar: benimAvatar(), sure: depoAl(localStorage, 'goaltech_sure') || '3+0' };
     if (tur === 'bot') govde.zorluk = segDeger($('bot-level'));
     const r = await api('/api/oda', govde);
     if (!r.success) { bildir(r.error, true); return; }
@@ -763,11 +850,11 @@ let taraf = 'izleyici', S = null, surum = -1, yoklama = null, ws = null;
 let secili = null, gecerliler = [], islemde = false, bekleyenTerfi = null, ters = false;
 let saatTaban = null, saatAn = 0, sonHamleSayisi = null, gosterilenBitis = null, sohbetSon = 0;
 
-async function odayaGir(id, izle) {
+async function odayaGir(id, izle, vs) {
     clearInterval(lobiZamanlayici);
     oda = id;
     try { history.replaceState(null, '', location.pathname + '?oda=' + encodeURIComponent(id) + (izle ? '&izle=1' : '')); } catch (e) {}
-    const r = await api('/api/katil', { ad: oyuncuAdi(), izle: !!izle });
+    const r = await api('/api/katil', { ad: oyuncuAdi(), avatar: benimAvatar(), izle: !!izle });
     if (!r.success) { oda = null; bildir(r.yok ? 'Oda bulunamadı veya süresi doldu.' : r.error, true); menuyeDon(); return; }
     taraf = r.taraf; ters = taraf === 'siyah';
     S = null; surum = -1; secili = null; gecerliler = []; sonHamleSayisi = null; gosterilenBitis = null; sohbetSon = 0;
@@ -775,7 +862,8 @@ async function odayaGir(id, izle) {
     $('menu').classList.add('hidden'); $('game').classList.remove('hidden');
     tahtaKur();
     await durumAl(true);
-    clearInterval(yoklama); yoklama = setInterval(durumAl, 1000);
+    if (vs) vsGoster();
+    clearInterval(yoklama); yoklama = setInterval(durumAl, 700);
     canliBaglan();
 }
 
@@ -789,17 +877,17 @@ async function odadanCik() {
 
 let durumIstek = 0;
 async function durumAl(zorla) {
-    if (!oda || (durumAl.mesgul && !zorla)) return;
+    if (!oda || ((durumAl.mesgul || hamleGidiyor) && !zorla)) return;
     durumAl.mesgul = true;
     const no = ++durumIstek;
     try {
         const r = await api('/api/durum?v=' + (zorla ? -1 : surum));
-        if (no < durumIstek && !zorla) return;
+        if ((no < durumIstek || hamleGidiyor) && !zorla) return;
         if (!r.success) { if (r.yok) { bildir('Oda kapandı.', true); odadanCik(); } return; }
         taraf = r.taraf;
         if (r.ayni) { saatGuncelle(r.sure); if (S) { S.oyuncular.beyaz.bagli = r.bagli.beyaz; S.oyuncular.siyah.bagli = r.bagli.siyah; barlariCiz(); } return; }
         durumUygula(r.oda);
-    } catch (e) {
+    } catch (e) { console.error('durum hatası:', e);
     } finally { durumAl.mesgul = false; }
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && oda) durumAl(true); });
@@ -807,7 +895,12 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && od
 function benimSiram() { return S && !S.bitti && taraf !== 'izleyici' && (taraf === 'beyaz') === S.beyaz_sirasi && herkesHazir(); }
 function herkesHazir() { return S && S.oyuncular.beyaz.katildi && S.oyuncular.siyah.katildi; }
 
+let hamleGidiyor = false;
+// İstek cevabında yeni durum geldiyse onu kullan, yoksa sunucudan çek
+function yanitUygula(r) { if (r && r.oda && oda) { durumUygula(r.oda); return Promise.resolve(); } return durumAl(true); }
+
 function durumUygula(o) {
+    if (S && o.surum < surum) return;      // geç gelen eski cevap
     const onceki = S;
     S = o; surum = o.surum;
     const yeniHamle = sonHamleSayisi !== null && o.hamleler.length === sonHamleSayisi + 1;
@@ -822,8 +915,8 @@ function durumUygula(o) {
     if (yeniHamle) hamleAnimasyonu();
     barlariCiz(); hamleListesi(); mesajCiz(); dugmeler(); istekPenceresi(); sohbetCiz(o.sohbet || []);
     $('time-box').style.display = (o.tur !== 'lobi' && taraf !== 'izleyici' && (!o.hamleler.length || o.bitti)) ? '' : 'none';
-    const secili = $('game-time').querySelector('.tc-btn.active');
-    if (!secili || secili.dataset.v !== o.sure_ayari) sureSeciciKur($('game-time'), o.sure_ayari, sureDegistir);
+    const seciliSure = $('game-time').querySelector('.tc-btn.active');
+    if (!seciliSure || seciliSure.dataset.v !== o.sure_ayari) sureSeciciKur($('game-time'), o.sure_ayari, sureDegistir);
     const etiket = o.tur === 'bot' ? '🤖 Bot · ' + (SEVIYE[o.bot] || '') : o.tur === 'lobi' ? (o.puanli ? '⚡ Puanlı · ' : '⚡ Puansız · ') + sureKisa(o.sure_ayari) : '👥 Arkadaş · ' + sureKisa(o.sure_ayari);
     $('mode-label').innerText = etiket;
     if (o.bitti && gosterilenBitis !== o.hamleler.length + ':' + o.sonuc && (onceki ? !onceki.bitti : true) && !(o.sonuc === '*' && taraf === 'izleyici')) {
@@ -919,12 +1012,10 @@ async function kareTiklandi(r, c) {
     if (secili && secili[0] === r && secili[1] === c) { secili = null; gecerliler = []; tahtaCiz(); return; }
     const benimTas = p !== ' ' && (p === p.toUpperCase()) === (taraf === 'beyaz');
     if (!benimTas) { if (secili && p === ' ') salla(); secili = null; gecerliler = []; tahtaCiz(); return; }
-    secili = [r, c]; gecerliler = []; tahtaCiz();
-    islemde = true;
-    try {
-        const d = await api('/api/gecerli', { r, c });
-        if (secili && secili[0] === r && secili[1] === c) { gecerliler = d.moves || []; if (!gecerliler.length) salla(); }
-    } catch (e) {} finally { islemde = false; tahtaCiz(); }
+    // Yasal hamleler durumla birlikte geldiği için sunucuya sormadan anında gösterilir
+    secili = [r, c]; gecerliler = (S.yasal && S.yasal[r + ',' + c]) || [];
+    if (!gecerliler.length) salla();
+    tahtaCiz();
 }
 function terfiSor(a, b) {
     bekleyenTerfi = { a, b };
@@ -938,15 +1029,45 @@ function terfiSor(a, b) {
 }
 $('m-promo').addEventListener('click', e => { if (e.target.id === 'm-promo') { kapat('m-promo'); bekleyenTerfi = null; } });
 
+// Hamleyi sunucu cevabını beklemeden tahtada oynar (sunucu yine de doğrular)
+function yerelHamle(a, b, terfi) {
+    const t = S.tahta, p = t[a[0]][a[1]], hedef = t[b[0]][b[1]];
+    let alma = hedef !== ' ';
+    const son = [[a, b]];
+    if (p.toUpperCase() === 'P' && a[1] !== b[1] && hedef === ' ') { t[a[0]][b[1]] = ' '; alma = true; }   // geçerken alma
+    if (p.toUpperCase() === 'K' && Math.abs(b[1] - a[1]) === 2) {                                            // rok
+        const r = a[0];
+        if (b[1] === 6) { t[r][5] = t[r][7]; t[r][7] = ' '; son.push([[r, 7], [r, 5]]); }
+        else { t[r][3] = t[r][0]; t[r][0] = ' '; son.push([[r, 0], [r, 3]]); }
+    }
+    t[b[0]][b[1]] = terfi || p; t[a[0]][a[1]] = ' ';
+    const sure = { beyaz: anlikSure('beyaz'), siyah: anlikSure('siyah') };
+    if (S.saat_isliyor) sure[taraf] += S.artis || 0; else if (taraf === 'beyaz') S.saat_isliyor = true;
+    S.sure = sure; S.beyaz_sirasi = !S.beyaz_sirasi; S.son_hamle = son; S.yasal = {}; S.sah_tehdit = false;
+    S.hamleler.push('…'); sonHamleSayisi = S.hamleler.length;
+    if (S.tur === 'bot') S.bot_dusunuyor = true;
+    secili = null; gecerliler = [];
+    alma ? SES.alma() : SES.hamle();
+    saatGuncelle(sure); tahtaCiz(); hamleAnimasyonu(); barlariCiz(); hamleListesi(); mesajCiz();
+}
+
 async function hamleGonder(a, b, terfi) {
-    islemde = true;
-    try {
-        const d = await api('/api/hamle', { from: a, to: b, promotion: terfi || null });
-        secili = null; gecerliler = [];
-        if (!d.success) { mesajYaz(d.error, 'err'); salla(); }
-    } catch (e) { mesajYaz('Bağlantı hatası, tekrar dene.', 'err'); }
-    finally { islemde = false; }
-    await durumAl(true);
+    islemde = true; hamleGidiyor = true; durumIstek++;       // yoldaki eski yoklamalar yok sayılsın
+    yerelHamle(a, b, terfi);
+    let d = null;
+    try { d = await api('/api/hamle', { from: a, to: b, promotion: terfi || null }); }
+    catch (e) { mesajYaz('Bağlantı hatası, tekrar dene.', 'err'); }
+    finally { islemde = false; hamleGidiyor = false; }
+    if (!d || !d.success || !d.oda) {                         // sunucu kabul etmediyse gerçek duruma dön
+        surum = -1; sonHamleSayisi = null;
+        await durumAl(true);
+        if (d && !d.success) { mesajYaz(d.error, 'err'); salla(); }
+        return;
+    }
+    durumUygula(d.oda);
+    const san = d.oda.hamleler[d.oda.hamleler.length - 1] || '';
+    if (san.includes('+') || san.includes('#')) SES.sah();
+    if (d.oda.tur === 'bot' && !d.oda.bitti) durumAl(true);   // bot cevabını beklemeden iste
 }
 
 // ---------------- Oyuncu çubukları ve saat ----------------
@@ -981,9 +1102,8 @@ function barlariCiz() {
         const fark = S.skor[t] - S.skor[t === 'beyaz' ? 'siyah' : 'beyaz'];
         const yedigi = (S.alinan[t] || []).join('');
         const bagli = p.katildi && p.bagli;
-        const ikon = S.tur === 'bot' && t === 'siyah' ? '🤖 ' : (t === taraf ? '' : '');
-        $(id).innerHTML = `<div class="pinfo"><div class="pname"><span class="dot ${bagli ? 'on' : ''}"></span>${ikon}${esc(ad)}${elo}${t === taraf ? ' <span class="muted">(sen)</span>' : ''}</div>
-            <div class="pcaps">${yedigi}${fark > 0 ? '<b>+' + fark + '</b>' : ''}</div></div><div class="clock" data-t="${t}"></div>`;
+        $(id).innerHTML = `<div class="pbar-sol"><span class="av">${p.avatar || '♟'}</span><div class="pinfo"><div class="pname"><span class="dot ${bagli ? 'on' : ''}"></span>${esc(ad)}${elo}${t === taraf ? ' <span class="muted">(sen)</span>' : ''}</div>
+            <div class="pcaps">${yedigi}${fark > 0 ? '<b>+' + fark + '</b>' : ''}</div></div></div><div class="clock" data-t="${t}"></div>`;
         $(id).classList.toggle('turn', !S.bitti && (t === 'beyaz') === S.beyaz_sirasi);
     });
     saatCiz();
@@ -1034,14 +1154,14 @@ async function istekGonder(tip, ek) {
     const r = await api('/api/istek', Object.assign({ tip }, ek || {}));
     if (!r.success) bildir(r.error, true);
     else if (r.reddedildi) bildir(r.mesaj || 'Reddedildi', true);
-    await durumAl(true);
+    await yanitUygula(r);
 }
 async function beraberlikTeklif() { if (await onayla('Rakibine beraberlik teklif edilsin mi?', 'Teklif Et')) istekGonder('berabere'); }
 async function teslimOl() {
     const iptal = !S.hamleler.length && S.tur !== 'bot';
     if (!await onayla(iptal ? 'Oyun iptal edilsin mi?' : 'Teslim olmak istediğine emin misin?', iptal ? 'İptal Et' : 'Teslim Ol')) return;
     const r = await api('/api/teslim', {}); if (!r.success) bildir(r.error, true);
-    await durumAl(true);
+    await yanitUygula(r);
 }
 function yeniOyun() {
     kapat('m-over');
@@ -1050,7 +1170,7 @@ function yeniOyun() {
 async function sureDegistir(v) {
     const r = await api('/api/sure', { sure: v }); if (!r.success) bildir(r.error, true);
     depoYaz(localStorage, 'goaltech_sure', v);
-    await durumAl(true);
+    await yanitUygula(r);
 }
 function istekPenceresi() {
     const i = S.istek;
@@ -1066,7 +1186,7 @@ function istekPenceresi() {
     $('req-answer').style.display = benim ? 'none' : ''; $('req-cancel').style.display = benim ? '' : 'none';
     ac('m-request');
 }
-async function istekCevapla(kabul) { kapat('m-request'); await api('/api/cevap', { kabul }); await durumAl(true); }
+async function istekCevapla(kabul) { kapat('m-request'); await yanitUygula(await api('/api/cevap', { kabul })); }
 
 // ---------------- Oyun sonu ----------------
 function bitisPenceresi() {
@@ -1118,7 +1238,7 @@ function sohbetCiz(liste) {
 async function sohbetGonder() {
     const i = $('chat-input'), m = i.value.trim(); if (!m) return;
     i.value = ''; const r = await api('/api/sohbet', { metin: m }); if (!r.success) bildir(r.error, true);
-    await durumAl(true);
+    await yanitUygula(r);
 }
 
 async function paylas() {
@@ -1139,7 +1259,7 @@ function canliBaglan() {
         s.onopen = () => { acildi = true; ws = s; clearInterval(yoklama); yoklama = setInterval(durumAl, 2500); };
         s.onmessage = e => { try { const m = JSON.parse(e.data); if (m.surum !== undefined && m.surum !== surum) durumAl(true); } catch (x) {} };
         s.onclose = () => {
-            if (ws === s) { ws = null; clearInterval(yoklama); yoklama = setInterval(durumAl, 1000); }
+            if (ws === s) { ws = null; clearInterval(yoklama); yoklama = setInterval(durumAl, 700); }
             if (acildi && oda) setTimeout(canliBaglan, 3000);
         };
         s.onerror = () => {};
@@ -1154,7 +1274,7 @@ async function liderlikAc() {
     const r = await api('/api/liderlik');
     if (!r.liste.length) { $('leader-body').innerHTML = '<div class="empty">Henüz puanlı oyun oynanmadı. İlk sen ol! ⚡</div>'; return; }
     let h = '<table class="tbl"><tr><th>#</th><th>Oyuncu</th><th>Elo</th><th>Oyun</th><th>G / B / M</th></tr>';
-    r.liste.forEach((k, i) => { h += `<tr class="click" onclick="profilAc('${esc(k.ad)}')"><td>${i + 1}</td><td><b>${esc(k.ad)}</b></td><td class="win">${k.elo}</td><td>${k.oyun}</td><td>${k.galibiyet} / ${k.beraberlik} / ${k.maglubiyet}</td></tr>`; });
+    r.liste.forEach((k, i) => { h += `<tr class="click" onclick="profilAc('${esc(k.ad)}')"><td>${i + 1}</td><td><span class="av kucuk">${k.avatar || '♟'}</span><b>${esc(k.ad)}</b></td><td class="win">${k.elo}</td><td>${k.oyun}</td><td>${k.galibiyet} / ${k.beraberlik} / ${k.maglubiyet}</td></tr>`; });
     $('leader-body').innerHTML = h + '</table>';
 }
 async function profilAc(ad) {
@@ -1163,6 +1283,7 @@ async function profilAc(ad) {
     const r = await api('/api/profil/' + encodeURIComponent(ad));
     if (!r.success) { $('profile-body').innerHTML = '<div class="empty">' + esc(r.error) + '</div>'; return; }
     const k = r.kullanici;
+    $('profile-title').innerText = (k.avatar || '👤') + ' ' + k.ad;
     let h = `<div class="stats"><div class="stat"><b class="win">${k.elo}</b><span>Elo</span></div><div class="stat"><b>${k.galibiyet}</b><span>Galibiyet</span></div>
         <div class="stat"><b>${k.beraberlik}</b><span>Beraberlik</span></div><div class="stat"><b>${k.maglubiyet}</b><span>Mağlubiyet</span></div></div>`;
     if (!r.maclar.length) h += '<div class="empty">Henüz kayıtlı maç yok</div>';

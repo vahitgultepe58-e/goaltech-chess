@@ -58,7 +58,9 @@ app.config.update(
 )
 depo.kur()
 
-BOT_BEKLEME = 0.5          # bot hamlesinden önce kısa "düşünme" arası
+BOT_BEKLEME = 0            # bot hamlesinden önce beklenecek süre (sn)
+AVATARLAR = ('🦁', '🐯', '🦊', '🐺', '🐻', '🐼', '🐨', '🐱', '🐶', '🐰',
+             '🦉', '🦅', '🐧', '🐴', '🐘', '🐵', '🐢', '🐬', '🐙', '🐸')
 ILK_HAMLE_SURESI = 45      # lobi oyununda ilk hamle bu sürede yapılmazsa oyun iptal
 AD_DESENI = re.compile(r'^[A-Za-z0-9_çğıöşüÇĞİÖŞÜ]{3,20}$')
 EPOSTA_DESENI = re.compile(r'^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$')
@@ -140,6 +142,11 @@ def jeton_uret():
 
 def jeton_ozeti(jeton):
     return hashlib.sha256(str(jeton or '').encode()).hexdigest()
+
+
+def avatar_al():
+    a = veri().get('avatar')
+    return a if a in AVATARLAR else None
 
 
 def misafir_adi():
@@ -225,7 +232,8 @@ _giris_kilit = threading.Lock()
 
 def _kullanici_ozeti(k):
     return None if not k else {'ad': k['ad'], 'elo': k['elo'], 'oyun': k['oyun'], 'galibiyet': k['galibiyet'],
-                               'maglubiyet': k['maglubiyet'], 'beraberlik': k['beraberlik']}
+                               'maglubiyet': k['maglubiyet'], 'beraberlik': k['beraberlik'],
+                               'avatar': k.get('avatar')}
 
 
 def _kendi_ozetim(k):
@@ -263,6 +271,7 @@ def api_kayit():
     kid = depo.kullanici_ekle(ad, generate_password_hash(sifre))
     if not kid:
         return hata('Bu kullanıcı adı alınmış.')
+    depo.avatar_yaz(kid, avatar_al() or random.choice(AVATARLAR))
     yeni = depo.kullanici_id_ile(kid)
     oturum_ac(yeni)
     depo.son_giris_yaz(kid)
@@ -309,6 +318,18 @@ def _dogrulama_gonder(k, adres):
                          f"Merhaba {k['ad']},\nBu e-posta adresini Goaltech Chess hesabına eklemek için aşağıdaki bağlantıya tıkla. "
                          "Bağlantı 24 saat geçerlidir.\nBu isteği sen yapmadıysan bu e-postayı yok sayabilirsin.",
                          baglanti=link, dugme='E-postamı doğrula')
+
+
+@app.route('/api/avatar', methods=['POST'])
+def api_avatar():
+    k = aktif_kullanici()
+    if not k:
+        return hata('Önce giriş yapmalısın.', 401)
+    a = avatar_al()
+    if not a:
+        return hata('Geçersiz avatar.')
+    depo.avatar_yaz(k['id'], a)
+    return tamam(kullanici=_kendi_ozetim(depo.kullanici_id_ile(k['id'])))
 
 
 @app.route('/api/sifre_degistir', methods=['POST'])
@@ -464,6 +485,10 @@ def _tur_metni(o):
 
 def mac_kaydet_gerekirse(oid):
     """Oyun bittiyse ve henüz kaydedilmediyse maçı kaydeder, puanlıysa Elo'ları günceller (tek işlemde)."""
+    _, mevcut = depo.oda_oku(oid)      # çoğu hamlede oyun bitmemiştir: yazma kilidi almadan çık
+    if not mevcut or not mevcut['bitti'] or mevcut['mac_id'] is not None or mevcut['sonuc'] == '*':
+        return
+
     def fn(o):
         if not o or not o['bitti'] or o['mac_id'] is not None or o['sonuc'] == '*':
             return None, False
@@ -505,9 +530,9 @@ def mac_kaydet_gerekirse(oid):
 # =====================================================================
 # Oda oluşturma, katılma, durum
 # =====================================================================
-def _oyuncuyu_yerlestir(o, taraf, kim, kullanici, ad):
+def _oyuncuyu_yerlestir(o, taraf, kim, kullanici, ad, avatar=None):
     p = o['oyuncular'][taraf]
-    p.update({'id': kim, 'katildi': True,
+    p.update({'id': kim, 'katildi': True, 'avatar': kullanici.get('avatar') if kullanici else avatar,
               'kullanici_id': kullanici['id'] if kullanici else None,
               'elo': kullanici['elo'] if kullanici else None,
               'ad': kullanici['ad'] if kullanici else ad})
@@ -520,7 +545,7 @@ def api_oda_olustur():
         return hata('Geçersiz oyun türü.')
     zorluk = veri().get('zorluk') if veri().get('zorluk') in bot.SEVIYELER else 'orta'
     o = oyun.yeni_oda(tur, veri().get('sure') or oyun.VARSAYILAN_SURE, zorluk)
-    _oyuncuyu_yerlestir(o, 'beyaz', kimlik(), aktif_kullanici(), misafir_adi())
+    _oyuncuyu_yerlestir(o, 'beyaz', kimlik(), aktif_kullanici(), misafir_adi(), avatar_al())
     oid = oyun.yeni_oda_id()
     o['_id'] = oid
     with depo.islem() as con:
@@ -557,7 +582,7 @@ def api_katil():
                 p = o['oyuncular'][t]
                 # Boş yer ya da 30 sn'den uzun süredir bağlı olmayan misafirin yeri
                 if not p['katildi'] or (not baglantilar.get(t) and p['kullanici_id'] is None and not kullanici):
-                    _oyuncuyu_yerlestir(o, t, kim, kullanici, misafir_adi())
+                    _oyuncuyu_yerlestir(o, t, kim, kullanici, misafir_adi(), avatar_al())
                     yeni_katilim['evet'] = True
                     return t, True
         return 'izleyici', False
@@ -610,7 +635,7 @@ def bot_tetikle(oid):
     """Bot hamlesini istemcinin bir sonraki yoklamasını beklemeden arka planda başlatır.
     Thread desteklenmeyen sunucularda (ör. bazı uWSGI ayarları) yoklama yine botu çalıştırır."""
     def calis():
-        time.sleep(BOT_BEKLEME + 0.05)
+        time.sleep(BOT_BEKLEME + 0.02)
         try:
             surum, o = depo.oda_oku(oid)
             if o is not None:
@@ -694,7 +719,12 @@ def oyuncu_islemi(fn_icerik):
     mac_kaydet_gerekirse(oid)
     if isinstance(sonuc, tuple) and sonuc and sonuc[0] == 'hata':
         return hata(sonuc[1])
-    return tamam(**(sonuc or {}))
+    # Yeni durumu cevapla birlikte gönder: tarayıcının ayrıca sormasına gerek kalmaz
+    surum, o = depo.oda_oku(oid)
+    ek = dict(sonuc or {})
+    if o is not None:
+        ek['oda'] = oyun.gorunum(o, surum, depo.baglanti_durumu(oid))
+    return tamam(**ek)
 
 
 def _kare(deger):
@@ -886,8 +916,8 @@ def _eslestir(con, ben, rakip_kaydi):
     o = oyun.yeni_oda('lobi', rakip_kaydi['sure_ayari'])
     rakip_k = depo.kullanici_id_ile(rakip_kaydi['kullanici_id']) if rakip_kaydi['kullanici_id'] else None
     benim_taraf = random.choice(oyun.TARAFLAR)
-    _oyuncuyu_yerlestir(o, benim_taraf, ben['kimlik'], ben['kullanici'], ben['ad'])
-    _oyuncuyu_yerlestir(o, oyun.rakip(benim_taraf), rakip_kaydi['kimlik'], rakip_k, rakip_kaydi['ad'])
+    _oyuncuyu_yerlestir(o, benim_taraf, ben['kimlik'], ben['kullanici'], ben['ad'], ben['avatar'])
+    _oyuncuyu_yerlestir(o, oyun.rakip(benim_taraf), rakip_kaydi['kimlik'], rakip_k, rakip_kaydi['ad'], rakip_kaydi.get('avatar'))
     o['puanli'] = bool(ben['kullanici'] and rakip_k)
     oid = oyun.yeni_oda_id()
     o['_id'] = oid
@@ -901,7 +931,8 @@ def _eslestir(con, ben, rakip_kaydi):
 
 def _ben():
     k = aktif_kullanici()
-    return {'kimlik': kimlik(), 'kullanici': k, 'ad': k['ad'] if k else misafir_adi()}
+    return {'kimlik': kimlik(), 'kullanici': k, 'ad': k['ad'] if k else misafir_adi(),
+            'avatar': k.get('avatar') if k else avatar_al()}
 
 
 @app.route('/api/lobi/ara', methods=['POST'])
@@ -921,8 +952,8 @@ def api_lobi_ara():
         if aday:
             oid, taraf = _eslestir(con, ben, dict(aday))
             return tamam(eslesme={'oda': oid, 'taraf': taraf})
-        con.execute("INSERT INTO kuyruk (kimlik, ad, kullanici_id, elo, sure_ayari, zaman, son) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (ben['kimlik'], ben['ad'], kid, ben['kullanici']['elo'] if ben['kullanici'] else None, sure, simdi, simdi))
+        con.execute("INSERT INTO kuyruk (kimlik, ad, kullanici_id, elo, sure_ayari, zaman, son, avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (ben['kimlik'], ben['ad'], kid, ben['kullanici']['elo'] if ben['kullanici'] else None, sure, simdi, simdi, ben['avatar']))
         olay('rakip_aradi', sure_metni(sure), kullanici=ben['kullanici'] or False, ad=ben['ad'], con=con)
     return tamam(bekliyor=True)
 
@@ -965,7 +996,7 @@ def api_lobi():
         else:
             con.execute("UPDATE kuyruk SET son = ? WHERE kimlik = ?", (time.time(), kim))
     bekleyenler = [dict(r) for r in con.execute(
-        "SELECT rowid AS no, ad, elo, sure_ayari, kimlik = ? AS ben FROM kuyruk WHERE oda IS NULL AND son > ? ORDER BY zaman",
+        "SELECT rowid AS no, ad, avatar, elo, sure_ayari, kimlik = ? AS ben FROM kuyruk WHERE oda IS NULL AND son > ? ORDER BY zaman",
         (kim, time.time() - depo.KUYRUK_SURESI))]
     return tamam(eslesme=eslesme, araniyor=bool(benim and not benim['oda']),
                  bekleyenler=bekleyenler, canli=depo.canli_oyunlar())
