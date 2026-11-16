@@ -136,6 +136,31 @@ class BotOyunu(unittest.TestCase):
         self.assertEqual(c.durum(oda)['hamleler'], [])
 
 
+class AvatarVeHiz(unittest.TestCase):
+    def test_avatar(self):
+        u = Istemci('AV1')
+        r = u.post('/api/kayit', {'ad': 'Hayvansever', 'sifre': 'gizliSifre123', 'avatar': '🦊'})
+        self.assertEqual(r['kullanici']['avatar'], '🦊')
+        self.assertFalse(u.post('/api/avatar', {'avatar': '<b>x</b>'})['success'])      # listede olmayan reddedilir
+        self.assertEqual(u.post('/api/avatar', {'avatar': '🐼'})['kullanici']['avatar'], '🐼')
+        oda = u.post('/api/oda', {'tur': 'arkadas'})['oda']
+        m = Istemci('AV2')
+        m.post('/api/katil', {'ad': 'Konuk', 'avatar': '🐸'}, oda)
+        o = u.durum(oda)['oyuncular']
+        self.assertEqual((o['beyaz']['avatar'], o['siyah']['avatar']), ('🐼', '🐸'))
+
+    def test_durum_yasal_hamleleri_ve_hamle_cevabi(self):
+        w, b = Istemci('H1'), Istemci('H2')
+        oda = w.post('/api/oda', {'tur': 'arkadas'})['oda']
+        b.post('/api/katil', {}, oda)
+        o = w.durum(oda)
+        self.assertEqual(len(o['yasal']), 10)                                  # 8 piyon + 2 at oynayabilir
+        self.assertEqual(sorted(o['yasal']['6,4']), [[4, 4], [5, 4]])
+        r = w.hamle(oda, 'e2', 'e4')
+        self.assertEqual(r['oda']['hamleler'], ['e4'])                         # yeni durum cevapla birlikte gelir
+        self.assertIn('1,4', r['oda']['yasal'])                                # artık siyahın hamleleri
+
+
 class YonetimPaneli(unittest.TestCase):
     def test_sadece_yonetici_gorur(self):
         os.environ['GOALTECH_YONETICILER'] = 'Patron'

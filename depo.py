@@ -78,9 +78,11 @@ def kur():
     # Eski veritabanlarına sonradan eklenen sütunlar
     sutunlar = {r['name'] for r in con.execute("PRAGMA table_info(kullanicilar)")}
     for sutun, tanim in (('son_giris', 'REAL'), ('eposta', 'TEXT'), ('eposta_dogrulandi', 'INTEGER DEFAULT 0'),
-                         ('oturum_surum', 'INTEGER DEFAULT 0')):
+                         ('oturum_surum', 'INTEGER DEFAULT 0'), ('avatar', 'TEXT')):
         if sutun not in sutunlar:
             con.execute(f"ALTER TABLE kullanicilar ADD COLUMN {sutun} {tanim}")
+    if 'avatar' not in {r['name'] for r in con.execute("PRAGMA table_info(kuyruk)")}:
+        con.execute("ALTER TABLE kuyruk ADD COLUMN avatar TEXT")
     con.executescript("""
         CREATE UNIQUE INDEX IF NOT EXISTS kullanicilar_eposta ON kullanicilar(eposta COLLATE NOCASE)
             WHERE eposta_dogrulandi = 1;
@@ -192,11 +194,11 @@ def temizlik():
 # Bağlantı (kim şu an sayfada)
 # ---------------------------------------------------------------------
 def nabiz(oda_id, taraf):
-    """Oyuncu sayfada; en fazla 5 saniyede bir yazar."""
+    """Oyuncu sayfada; en fazla 10 saniyede bir yazar."""
     simdi = time.time()
     con = baglanti()
     satir = con.execute("SELECT son FROM baglantilar WHERE oda = ? AND taraf = ?", (oda_id, taraf)).fetchone()
-    if satir and simdi - satir['son'] < 5:
+    if satir and simdi - satir['son'] < 10:
         return
     con.execute("INSERT INTO baglantilar (oda, taraf, son) VALUES (?, ?, ?) "
                 "ON CONFLICT(oda, taraf) DO UPDATE SET son = excluded.son", (oda_id, taraf, simdi))
@@ -229,6 +231,10 @@ def sifre_yaz(kid, sifre_hash):
     """Şifreyi değiştirir ve oturum sürümünü artırır: o hesabın diğer cihazlardaki oturumları kapanır."""
     baglanti().execute("UPDATE kullanicilar SET sifre_hash = ?, oturum_surum = COALESCE(oturum_surum, 0) + 1 WHERE id = ?",
                        (sifre_hash, kid))
+
+
+def avatar_yaz(kid, avatar):
+    baglanti().execute("UPDATE kullanicilar SET avatar = ? WHERE id = ?", (avatar, kid))
 
 
 def kullanici_eposta_ile(eposta):
@@ -285,7 +291,7 @@ def kullanici_id_ile(kid):
 
 def liderlik(limit=50):
     return [dict(r) for r in baglanti().execute(
-        "SELECT ad, elo, oyun, galibiyet, maglubiyet, beraberlik FROM kullanicilar "
+        "SELECT ad, avatar, elo, oyun, galibiyet, maglubiyet, beraberlik FROM kullanicilar "
         "WHERE oyun > 0 ORDER BY elo DESC, oyun DESC LIMIT ?", (limit,))]
 
 

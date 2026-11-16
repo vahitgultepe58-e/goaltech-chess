@@ -29,7 +29,7 @@ def yeni_oda_id():
 
 
 def _bos_oyuncu():
-    return {'id': '', 'ad': '', 'kullanici_id': None, 'elo': None, 'katildi': False}
+    return {'id': '', 'ad': '', 'kullanici_id': None, 'elo': None, 'katildi': False, 'avatar': None}
 
 
 def yeni_oda(tur='arkadas', sure=VARSAYILAN_SURE, bot_zorluk=None, simdi=None):
@@ -48,7 +48,7 @@ def yeni_oda(tur='arkadas', sure=VARSAYILAN_SURE, bot_zorluk=None, simdi=None):
         'olusturma': simdi,
     }
     if tur == 'bot':
-        o['oyuncular']['siyah'].update({'ad': 'Bot', 'katildi': True, 'id': 'bot'})
+        o['oyuncular']['siyah'].update({'ad': 'Bot', 'katildi': True, 'id': 'bot', 'avatar': '🤖'})
     oyunu_baslat(o, toplam, simdi)
     return o
 
@@ -241,6 +241,16 @@ def taraf_bul(o, kimlik):
     return None
 
 
+def yasal_hamleler(o):
+    """Sıradaki tarafın tüm yasal hamleleri: {'6,4': [[5,4],[4,4]], ...}. Tarayıcı bunları beklemeden gösterir."""
+    if o['bitti']:
+        return {}
+    sonuc = {}
+    for b_sat, b_sut, h_sat, h_sut in K.tum_hamleler(o['d'], o['beyaz_sirasi']):
+        sonuc.setdefault(f"{b_sat},{b_sut}", []).append([h_sat, h_sut])
+    return sonuc
+
+
 def gorunum(o, surum, baglantilar, simdi=None):
     """Tarayıcıya gönderilen oda bilgisi."""
     simdi = simdi or time.time()
@@ -249,7 +259,7 @@ def gorunum(o, surum, baglantilar, simdi=None):
     oyuncular = {}
     for t in TARAFLAR:
         p = o['oyuncular'][t]
-        oyuncular[t] = {'ad': p['ad'], 'elo': p['elo'], 'katildi': p['katildi'],
+        oyuncular[t] = {'ad': p['ad'], 'elo': p['elo'], 'katildi': p['katildi'], 'avatar': p.get('avatar'),
                         'bagli': (t == 'siyah' and o['tur'] == 'bot') or bool(baglantilar.get(t)),
                         'uye': p['kullanici_id'] is not None}
     return {
@@ -263,6 +273,7 @@ def gorunum(o, surum, baglantilar, simdi=None):
         'sure': {t: round(sureler[t], 1) for t in TARAFLAR},
         'saat_isliyor': o['basladi'] and not o['bitti'],
         'hamleler': [h['san'] for h in o['hamleler']],
+        'yasal': yasal_hamleler(o),
         'son_hamle': o['son_hamle'],
         'bitti': o['bitti'], 'sonuc': o['sonuc'], 'sebep': o['sebep'], 'mesaj': o['mesaj'],
         'istek': o['istek'],

@@ -97,7 +97,7 @@ def hamle_sec(d, beyaz, zorluk, kalan_sure=None):
                 return max(alanlar, key=lambda m: DEGERLER[tahta[m[2]][m[3]].upper()])
         return random.choice(hamleler)
 
-    maks_derinlik, sure_limit = (2, 1.2) if zorluk == 'orta' else (4, 2.0)
+    maks_derinlik, sure_limit = (2, 0.8) if zorluk == 'orta' else (4, 1.3)
     if kalan_sure is not None:
         # Kalan sürenin en fazla ~1/30'unu harca; kısa oyunlarda süreden kaybetmesin
         sure_limit = max(0.2, min(sure_limit, kalan_sure / 30))
